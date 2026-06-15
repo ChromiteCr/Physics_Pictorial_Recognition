@@ -1,0 +1,17 @@
+# YOLOv8 数据集配置
+# 训练时将 self_captured 和 openclaw 的标注数据合并到 dataset/ 下
+# 使用 prepare_dataset.py 脚本完成合并
+
+path: /Users/billgao/Documents/Coding/SCPKU/Proj/data/dataset
+
+train: images/train
+val: images/val
+test: images/test
+
+nc: 5
+names:
+  0: wooden_block    # 木块
+  1: iron_block      # 铁块
+  2: spring          # 弹簧
+  3: string          # 细绳
+  4: dynamometer     # 弹簧测力计
