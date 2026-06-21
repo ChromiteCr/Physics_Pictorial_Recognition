@@ -77,16 +77,23 @@ def main(val_ratio: float = 0.15, test_ratio: float = 0.05, seed: int = 42):
             d.mkdir(parents=True)
 
     all_pairs = []
+    source_counts = {}
     for source in SOURCES:
         if not source.exists():
             continue
         pairs = collect_pairs(source)
+        source_counts[source.name] = len(pairs)
         print(f"  {source.name}: {len(pairs)} 张有效图片")
         all_pairs.extend(pairs)
 
     if not all_pairs:
         print("没有找到任何标注数据，请先将图片和标注放入 self_captured/ 或 openclaw/ 目录。")
         return
+
+    openclaw_ratio = source_counts.get("openclaw", 0) / len(all_pairs)
+    if openclaw_ratio > 0.25:
+        print(f"  [提醒] openclaw 网络图片占比 {openclaw_ratio:.0%}，建议控制在 25% 以内，"
+              f"以自拍数据为主保证真实场景一致性")
 
     counts = split_and_copy(all_pairs, val_ratio, test_ratio)
     total = sum(counts.values())

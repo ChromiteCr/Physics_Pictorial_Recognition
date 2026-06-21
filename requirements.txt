@@ -1,0 +1,20 @@
+# ── 力学探究实验项目依赖 ────────────────────────────────────────────
+# 安装顺序建议：先按硬件装好 torch，再装其余。
+#
+# RTX 5090 (Blackwell / sm_120) 必须用 CUDA 12.8+ 的 torch：
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# 本机无 GPU 仅做冒烟测试时，装 CPU 版 torch 即可。
+
+# ── 核心：检测 + 轨迹提取 + 物理计算 + 可视化（必装） ──────────────
+ultralytics>=8.2.0        # YOLOv8/YOLO11 + RT-DETR
+opencv-python>=4.9.0      # 标记跟踪(HSV+质心)、绘制叠加
+numpy>=1.26.0
+scipy>=1.11.0             # 振动分析的波峰检测(find_peaks)
+matplotlib>=3.8.0         # 动画
+pillow>=10.0.0            # GIF 写出
+
+# ── 提精度：零样本自动标注（autolabel.py 用，强烈建议） ───────────
+transformers>=4.40.0      # Grounding DINO（IDEA-Research/grounding-dino-base）
+
+# ── 提精度：清洗 OpenClaw 爬取的网络图片（可选） ───────────────────
+open_clip_torch>=2.24.0   # CLIP 零样本，过滤与目标器件不符的网络杂图

@@ -1,6 +1,12 @@
-# YOLOv8 数据集配置
+# YOLO 数据集配置（力学探究实验版）
 # 训练时将 self_captured 和 openclaw 的标注数据合并到 dataset/ 下
 # 使用 prepare_dataset.py 脚本完成合并
+#
+# 设计说明：
+#   - 检测类别只保留「块状、对包围盒友好」的器件，保证小数据集下也好检测
+#   - 运动轨迹（小车/摆球的位置-时间序列）不在检测类别里，
+#     由经典 CV 标记跟踪（颜色色块 + 逐帧定心）提取，见 physics.py track_marker()
+#   - 覆盖实验：动量定理、机械能守恒、圆周运动（基础）+ 振动（高级）
 
 path: /Users/billgao/Documents/Coding/SCPKU/Proj/data/dataset
 
@@ -8,10 +14,11 @@ train: images/train
 val: images/val
 test: images/test
 
-nc: 5
+nc: 6
 names:
-  0: wooden_block    # 木块
-  1: iron_block      # 铁块
-  2: spring          # 弹簧
-  3: string          # 细绳
-  4: dynamometer     # 弹簧测力计
+  0: cart            # 小车（动量定理碰撞实验、能量守恒斜面实验）
+  1: track           # 导轨/轨道（含斜面，定位与场景分类用）
+  2: pendulum_bob    # 摆球/振子质量块（机械能守恒摆、圆周运动绳球、振动摆共用）
+  3: spring          # 弹簧（振动实验：弹簧振子）
+  4: string          # 细线（摆动、圆周运动用绳）
+  5: ruler           # 标定参考尺（已知长度，像素→厘米换算）

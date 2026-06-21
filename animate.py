@@ -1,12 +1,13 @@
 """
-动画与力图叠加生成模块（阶段五实现）
+力学实验可视化与动画模块（力学版）
 
-当前为骨架，接口已定义，具体渲染逻辑在阶段五填充。
+两个入口，均被 detect.py 调用：
+  - draw_motion_overlay()   在代表帧上叠加：运动轨迹 + 末态速度箭头 + 关键量标注
+  - generate_motion_animation()  按 mode 生成对应的 GIF 动画
 """
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -15,117 +16,172 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
+TRACE_COLOR_BGR = (0, 220, 255)    # 黄 - 轨迹
+VELOCITY_COLOR_BGR = (0, 0, 255)   # 红 - 速度箭头
+TEXT_COLOR_BGR = (40, 40, 220)     # 红 - 文字
 
-# 箭头颜色（BGR for OpenCV，RGB for Matplotlib）
-FORCE_COLOR_BGR = (0, 64, 255)     # 红色
-FORCE_COLOR_RGB = (1.0, 0.25, 0.0)
 
-
-def draw_force_overlay(
-    image_path: str | Path,
+def draw_motion_overlay(
+    frame_bgr: np.ndarray,
+    tracks: dict,
     physics_data: dict,
     save_path: str,
-    arrow_scale: float = 30.0,
 ) -> None:
-    """
-    在原图上叠加力箭头，保存结果。
+    """在代表帧（建议传入最后一帧）上叠加轨迹与关键物理量。"""
+    img = frame_bgr.copy()
 
-    Args:
-        image_path:  原始实验照片路径
-        physics_data: extract_physics() 返回的字典
-        save_path:   输出图片路径
-        arrow_scale: 力箭头长度缩放系数（像素/牛顿）
-    """
-    img = cv2.imread(str(image_path))
-    if img is None:
-        raise FileNotFoundError(f"无法读取图片: {image_path}")
+    for key, track in tracks.items():
+        if not track:
+            continue
+        pts = np.array([[p.x, p.y] for p in track], dtype=np.int32)
+        cv2.polylines(img, [pts], False, TRACE_COLOR_BGR, 2)
+        if len(pts) >= 2:
+            p0, p1 = pts[-2], pts[-1]
+            cv2.arrowedLine(img, tuple(p0), tuple(p1), VELOCITY_COLOR_BGR, 2, tipLength=0.4)
 
-    forces = physics_data.get("forces", [])
-    if not forces:
-        cv2.imwrite(save_path, img)
-        return
-
-    for force in forces:
-        magnitude = force["magnitude"]
-        angle_deg = force["angle_deg"]
-        ox, oy = force["origin_xy"]
-        label = force["label"]
-
-        angle_rad = np.deg2rad(angle_deg)
-        length = max(magnitude * arrow_scale, 30)  # 最短 30px
-        ex = int(ox + length * np.cos(angle_rad))
-        ey = int(oy - length * np.sin(angle_rad))  # 图像 y 轴向下
-
-        cv2.arrowedLine(img, (int(ox), int(oy)), (ex, ey),
-                        FORCE_COLOR_BGR, 2, tipLength=0.25)
-        cv2.putText(img, label, (ex + 5, ey),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, FORCE_COLOR_BGR, 2)
+    analysis = physics_data.get("analysis", {})
+    lines = [f"mode: {physics_data.get('mode')}"]
+    for k, v in analysis.items():
+        if isinstance(v, (int, float, bool)) or v is None:
+            lines.append(f"{k}: {v}")
+    for i, line in enumerate(lines[:8]):
+        cv2.putText(img, line, (10, 28 + i * 26), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6, TEXT_COLOR_BGR, 2, cv2.LINE_AA)
 
     cv2.imwrite(save_path, img)
 
 
-def generate_spring_animation(
-    spring_info: dict,
+def generate_motion_animation(
+    physics_data: dict,
+    tracks: dict,
     save_path: str,
-    fps: int = 15,
-    duration_s: float = 2.0,
+    fps: int = 20,
 ) -> None:
-    """
-    生成弹簧从自然长度伸长到当前形变量的 GIF 动画，
-    同步显示胡克定律公式 F = kx。
+    """按 physics_data['mode'] 分发到对应的动画生成函数。"""
+    mode = physics_data.get("mode")
+    if mode == "momentum":
+        _animate_momentum(physics_data, tracks, save_path, fps)
+    elif mode == "energy_conservation":
+        _animate_energy(physics_data, save_path, fps)
+    elif mode == "circular_motion":
+        _animate_circular(physics_data, tracks, save_path, fps)
+    elif mode == "vibration":
+        _animate_vibration(physics_data, tracks, save_path, fps)
+    else:
+        raise ValueError(f"未知模式: {mode}")
 
-    Args:
-        spring_info:  extract_spring_deformation() 返回的 SpringInfo 字典
-        save_path:    输出 GIF 路径
-        fps:          帧率
-        duration_s:   动画总时长（秒）
-    """
-    natural_len = spring_info.get("natural_length_cm", 5.0)
-    deformation = spring_info.get("deformation_cm", 0.0)
-    k = spring_info.get("spring_constant")
-    total_len = natural_len + deformation
 
-    n_frames = int(fps * duration_s)
-    fig, ax = plt.subplots(figsize=(3, 5))
+def _animate_momentum(physics_data, tracks, save_path, fps):
+    t1 = tracks.get("track1", [])
+    t2 = tracks.get("track2", [])
+    if not t1 or not t2:
+        return
+    fig, ax = plt.subplots(figsize=(6, 3))
+    n_frames = min(len(t1), len(t2))
 
-    def _draw_spring(ax, length_cm: float, deform_cm: float):
+    def update(i):
         ax.clear()
-        ax.set_xlim(0, 2)
-        ax.set_ylim(0, total_len * 1.3)
+        ax.set_xlim(min(p.x for p in t1 + t2) - 20, max(p.x for p in t1 + t2) + 20)
+        ax.set_ylim(0, 2)
         ax.axis("off")
+        ax.plot(t1[i].x, 1, "bs", ms=16, label="cart1")
+        ax.plot(t2[i].x, 1, "rs", ms=16, label="cart2")
+        analysis = physics_data.get("analysis", {})
+        ax.set_title(
+            f"p_before={analysis.get('momentum_before_kg_m_s')} "
+            f"p_after={analysis.get('momentum_after_kg_m_s')} kg·m/s",
+            fontsize=10,
+        )
+        ax.legend(loc="upper right", fontsize=8)
 
-        # 固定端
-        ax.plot([0.5, 1.5], [length_cm, length_cm], "k-", lw=3)
-        ax.plot([1.0, 1.0], [length_cm, length_cm + 0.3], "k-", lw=2)
+    ani = animation.FuncAnimation(fig, update, frames=n_frames, interval=1000 // fps)
+    ani.save(save_path, writer="pillow", fps=fps)
+    plt.close(fig)
 
-        # 弹簧（锯齿线）
-        n_coils = 8
-        y_pts = np.linspace(length_cm + 0.3, 0, n_coils * 2 + 2)
-        x_pts = np.array([1.0] + [0.65 if i % 2 == 0 else 1.35
-                                   for i in range(n_coils * 2)] + [1.0])
-        ax.plot(x_pts, y_pts, "b-", lw=1.5)
 
-        # 质量块
-        rect = plt.Rectangle((0.6, -0.5), 0.8, 0.5,
-                              linewidth=1.5, edgecolor="gray", facecolor="peru")
-        ax.add_patch(rect)
+def _animate_energy(physics_data, save_path, fps):
+    analysis = physics_data.get("analysis", {})
+    t = analysis.get("time_s", [])
+    ke = analysis.get("kinetic_energy_J", [])
+    pe = analysis.get("potential_energy_J", [])
+    total = analysis.get("total_energy_J", [])
+    if not t:
+        return
 
-        # 公式
-        f_val = k * deform_cm / 100 if k and deform_cm > 0 else 0.0
-        formula = (f"F = k·x\n"
-                   f"x = {deform_cm:.1f} cm\n"
-                   f"F = {f_val:.2f} N" if k else f"x = {deform_cm:.1f} cm")
-        ax.text(0.05, 0.05, formula, transform=ax.transAxes,
-                fontsize=9, verticalalignment="bottom",
-                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.7))
+    fig, ax = plt.subplots(figsize=(6, 4))
+    n_frames = len(t)
 
-    def update(frame):
-        t = frame / n_frames
-        # 缓入缓出
-        ease = t * t * (3 - 2 * t)
-        current_deform = deformation * ease
-        current_len = natural_len + current_deform
-        _draw_spring(ax, current_len, current_deform)
+    def update(i):
+        ax.clear()
+        ax.set_xlim(0, max(t))
+        ax.set_ylim(0, max(total) * 1.2 if total else 1)
+        ax.plot(t[: i + 1], ke[: i + 1], "r-", label="KE")
+        ax.plot(t[: i + 1], pe[: i + 1], "b-", label="PE")
+        ax.plot(t[: i + 1], total[: i + 1], "k--", label="Total")
+        ax.set_xlabel("t (s)")
+        ax.set_ylabel("Energy (J)")
+        ax.legend(loc="upper right", fontsize=9)
+        ax.set_title(f"机械能守恒  误差={analysis.get('conservation_error_ratio')}", fontsize=10)
+
+    ani = animation.FuncAnimation(fig, update, frames=n_frames, interval=1000 // fps)
+    ani.save(save_path, writer="pillow", fps=fps)
+    plt.close(fig)
+
+
+def _animate_circular(physics_data, tracks, save_path, fps):
+    track = tracks.get("track1", [])
+    if not track:
+        return
+    analysis = physics_data.get("analysis", {})
+    fig, ax = plt.subplots(figsize=(5, 5))
+    n_frames = len(track)
+    xs = [p.x for p in track]
+    ys = [p.y for p in track]
+
+    def update(i):
+        ax.clear()
+        ax.set_aspect("equal")
+        ax.plot(xs, ys, "lightgray", lw=1)
+        ax.plot(xs[: i + 1], ys[: i + 1], "b-", lw=2)
+        ax.plot(xs[i], ys[i], "ro", ms=10)
+        ax.invert_yaxis()
+        ax.set_title(
+            f"T={analysis.get('period_s')}s  v={analysis.get('linear_velocity_cm_s')}cm/s  "
+            f"a_c={analysis.get('centripetal_acceleration_m_s2')}m/s²",
+            fontsize=9,
+        )
+
+    ani = animation.FuncAnimation(fig, update, frames=n_frames, interval=1000 // fps)
+    ani.save(save_path, writer="pillow", fps=fps)
+    plt.close(fig)
+
+
+def _animate_vibration(physics_data, tracks, save_path, fps):
+    track = tracks.get("track1", [])
+    if not track:
+        return
+    analysis = physics_data.get("analysis", {})
+    t = [p.t for p in track]
+    x = [p.x for p in track]
+    x0 = sum(x) / len(x)
+    disp = [v - x0 for v in x]
+
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+    n_frames = len(track)
+
+    def update(i):
+        ax.clear()
+        ax.set_xlim(0, max(t))
+        ax.set_ylim(min(disp) * 1.2, max(disp) * 1.2)
+        ax.plot(t[: i + 1], disp[: i + 1], "g-", lw=1.5)
+        ax.axhline(0, color="gray", lw=0.5)
+        ax.set_xlabel("t (s)")
+        ax.set_ylabel("displacement (px)")
+        ax.set_title(
+            f"T={analysis.get('period_s')}s  A={analysis.get('amplitude_cm')}cm  "
+            f"γ={analysis.get('damping_coefficient')}",
+            fontsize=10,
+        )
 
     ani = animation.FuncAnimation(fig, update, frames=n_frames, interval=1000 // fps)
     ani.save(save_path, writer="pillow", fps=fps)
@@ -134,11 +190,17 @@ def generate_spring_animation(
 
 # ── 简单测试 ──────────────────────────────────────────────────────
 if __name__ == "__main__":
-    spring_data = {
-        "deformation_cm": 2.5,
-        "natural_length_cm": 5.0,
-        "force_n": 1.25,
-        "spring_constant": 50.0,  # N/m
+    from physics import TrackPoint
+    import math
+
+    fps = 30.0
+    t = [i / fps for i in range(120)]
+    x = [100 + 50 * math.exp(-0.3 * ti) * math.cos(2 * math.pi * 1.2 * ti) for ti in t]
+    track = [TrackPoint(t=ti, x=xi, y=200.0) for ti, xi in zip(t, x)]
+
+    mock_physics = {
+        "mode": "vibration",
+        "analysis": {"period_s": 0.83, "amplitude_cm": 5.0, "damping_coefficient": 0.3},
     }
-    generate_spring_animation(spring_data, "/tmp/test_spring.gif")
-    print("动画已保存到 /tmp/test_spring.gif")
+    _animate_vibration(mock_physics, {"track1": track}, "/tmp/test_vibration.gif", fps=20)
+    print("动画已保存到 /tmp/test_vibration.gif")
