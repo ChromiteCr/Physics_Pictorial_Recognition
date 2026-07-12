@@ -8,7 +8,7 @@
 #     由经典 CV 标记跟踪（颜色色块 + 逐帧定心）提取，见 physics.py track_marker()
 #   - 覆盖实验：动量定理、机械能守恒、圆周运动（基础）+ 振动（高级）
 
-path: /Users/billgao/Documents/Coding/SCPKU/Proj/data/dataset
+path: dataset  # 相对路径，相对本文件(data/dataset.yaml)所在目录解析，换机器不用改
 
 train: images/train
 val: images/val
@@ -18,7 +18,16 @@ nc: 6
 names:
   0: cart            # 小车（动量定理碰撞实验、能量守恒斜面实验）
   1: track           # 导轨/轨道（含斜面，定位与场景分类用）
-  2: pendulum_bob    # 摆球/振子质量块（机械能守恒摆、圆周运动绳球、振动摆共用）
-  3: spring          # 弹簧（振动实验：弹簧振子）
-  4: string          # 细线（摆动、圆周运动用绳）
-  5: ruler           # 标定参考尺（已知长度，像素→厘米换算）
+  2: spring          # [已停用，2026-07-10] 裸弹簧类误检率过高（圆孔/卷尺内芯常被
+                     # 误认成线圈），本轮标注不再主动标它，训练时该类基本无实例，
+                     # 保留编号占位，不删除、不重排后续类的 id
+  3: string          # 细线（摆动、圆周运动用绳）
+  4: ruler           # [仅训练，detect.py 不输出] 标定参考尺，实测检测噪声极大
+                     # （track/ruler 混淆严重，混淆矩阵显示 track 真实类 0% 被
+                     # 正确识别、57% 被误判成 ruler），detect.py 主动过滤掉它的
+                     # 检测结果；因此 calibrate() 目前拿不到 ruler 框，px/cm
+                     # 标定暂时失效，需要另找标定方式（见 detect.py 顶部说明）
+  5: dynamometer     # 弹簧测力计（整个测力仪器，含外壳/刻度/挂钩，区别于裸弹簧）
+
+# [2026-07-11] 删除 pendulum_bob 类：首轮训练验证集里 0 个真实实例，训练集也是
+# 0 实例，模型完全没学过，混淆矩阵里这一类整行整列空白。要重新启用得先补拍。

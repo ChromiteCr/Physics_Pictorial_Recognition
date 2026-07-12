@@ -1,0 +1,47 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "realsubway-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/billgao/Documents/Coding/Passion_Project/realsubway", "run", "dev", "--", "--port", "5181"],
+      "port": 5181
+    },
+    {
+      "name": "realsubway-dev2",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/billgao/Documents/Coding/Passion_Project/realsubway", "run", "dev", "--", "--port", "5182"],
+      "port": 5182
+    },
+    {
+      "name": "aibird-static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8743", "--directory", "/Users/billgao/Documents/Coding/AISchoolTeam/ICC/NeatPic/neatpicc/AI-Bird-main"],
+      "port": 8743
+    },
+    {
+      "name": "aiti-web-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/billgao/Documents/Coding/AIPersonality", "run", "dev", "--", "--port", "5183"],
+      "port": 5183
+    },
+    {
+      "name": "scpku-app",
+      "runtimeExecutable": "streamlit",
+      "runtimeArgs": ["run", "/Users/billgao/Documents/Coding/SCPKU/Proj/app.py", "--server.port", "8765", "--server.headless", "true"],
+      "port": 8765
+    },
+    {
+      "name": "maestrwave-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/billgao/Documents/Coding/MTX/MaestrWave/frontend", "run", "dev", "--", "--port", "5199"],
+      "port": 5199
+    },
+    {
+      "name": "scpku-gallery",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8902", "--directory", "/Users/billgao/Documents/Coding/SCPKU/Proj/output"],
+      "port": 8902
+    }
+  ]
+}

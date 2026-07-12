@@ -43,9 +43,26 @@ WORKERS = 8
 DEVICE = 0             # 租赁 GPU 编号；本机无 GPU 冒烟测试时设为 "cpu"
 
 
+def ensure_absolute_dataset_path():
+    """
+    把 dataset.yaml 的 path: 字段重写成当前机器上的绝对路径。
+
+    教训：写死绝对路径会导致换机器直接 FileNotFoundError；改成相对路径后发现
+    ultralytics 把相对 path 解析成相对全局 settings.json 的 datasets_dir（不是
+    相对 yaml 文件所在目录），同样会指向错误位置。唯一稳妥的办法是每次训练前
+    都用当前机器的真实路径自动重写这一行，不依赖任何人手动改 yaml。
+    """
+    abs_path = str((PROJ_DIR / "data" / "dataset").resolve())
+    lines = DATA_YAML.read_text().split("\n")
+    lines = [f"path: {abs_path}" if l.startswith("path:") else l for l in lines]
+    DATA_YAML.write_text("\n".join(lines))
+
+
 def main():
     if not DATA_YAML.exists():
         raise FileNotFoundError(f"找不到数据集配置: {DATA_YAML}")
+
+    ensure_absolute_dataset_path()
 
     # 检查训练集是否有图片
     train_img_dir = PROJ_DIR / "data" / "dataset" / "images" / "train"

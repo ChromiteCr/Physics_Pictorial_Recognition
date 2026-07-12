@@ -17,15 +17,38 @@ import argparse
 from pathlib import Path
 
 # 文本提示 → YOLO 类别 id（与 data/dataset.yaml 对齐）
+#
+# 实测教训（2026-07-10，用 testi.png 验证）：单词提示词(cart/track/ball/spring/
+# string/ruler)几乎测不出东西——最高置信度仅 0.13，远低于任何合理阈值。换成
+# 描述性短语后同一张图立刻测出 4/6 类：
+#   "wooden block with holes" 0.73 / "thin string" 0.55 /
+#   "metal cylindrical weight" 0.59 / "spring scale" ~0.42
+# track/ruler 仍互相混淆（真正的尺子被认成 "metal track"，导轨被认成 "ruler"），
+# cart/ball 未在该图中出现，尚未验证，等拍到小车/摆球照片后需要重新测试调整。
+#
+# 2026-07-10 第二轮：批量看过 images/ 下 41 张图后发现"弹簧测力计"整机（外壳+
+# 刻度+挂钩）跟"裸弹簧"（振动实验用的线圈本体）视觉差异很大，硬塞进同一类会
+# 互相污染，新增 dynamometer(6) 类专门表示测力计整机。
+#
+# 2026-07-10 第三轮：spring(3) 提示词("coiled metal spring")实测几乎全是误检——
+# 圆孔（砝码木块/尺子的装订孔）、卷尺内芯、螺丝螺纹都会被误认成裸弹簧线圈，
+# 76 个自动框里全部删除。已决定该类暂不参与本轮训练标注，故从提示词里去掉，
+# 避免继续产生噪声框；class id 3 仍保留在 dataset.yaml 里（占位，不删编号），
+# 只是不再主动标注。
+# cart(0) 提示词一直测不出来（自动检测 0 命中率），已在 6 张确认含小车的图上
+# 改为人工手动拉框，不再依赖 Grounding DINO。
+#
+# 2026-07-11 第四轮：删除 pendulum_bob 类（首轮训练验证集/训练集都是 0 实例，
+# 混淆矩阵整行整列空白），原提示词 "ball" 一并去掉；后续 string/ruler/
+# dynamometer 的 id 相应减 1，与新版 dataset.yaml（6 类）对齐。
 PROMPT_TO_CLASS = {
     "cart": 0,
-    "track": 1,
-    "ball": 2,
-    "spring": 3,
-    "string": 4,
-    "ruler": 5,
+    "aluminum track rail": 1,
+    "thin string": 3,
+    "measuring ruler with markings": 4,
+    "spring scale dynamometer": 5,
 }
-BOX_THRESHOLD = 0.30
+BOX_THRESHOLD = 0.25
 TEXT_THRESHOLD = 0.25
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
@@ -68,7 +91,7 @@ def autolabel_dir(images_dir: Path, out_dir: Path, device: str = "cuda"):
             outputs = model(**inputs)
         results = processor.post_process_grounded_object_detection(
             outputs, inputs.input_ids,
-            box_threshold=BOX_THRESHOLD, text_threshold=TEXT_THRESHOLD,
+            threshold=BOX_THRESHOLD, text_threshold=TEXT_THRESHOLD,
             target_sizes=[(h, w)],
         )[0]
 

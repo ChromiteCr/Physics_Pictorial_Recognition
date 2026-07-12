@@ -42,6 +42,11 @@ def collect_pairs(source_dir: Path) -> list[tuple[Path, Path]]:
 
 
 def split_and_copy(pairs: list, val_ratio: float, test_ratio: float):
+    """
+    pairs 中每项为 (img_path, lbl_path, source_tag)。
+    输出文件名前缀来源标签（如 self_captured_img_0001.jpg），
+    避免不同来源目录下同名文件（如两边都有 img_0001.jpg）互相覆盖。
+    """
     random.shuffle(pairs)
     n = len(pairs)
     n_test = max(1, int(n * test_ratio)) if n > 5 else 0
@@ -58,9 +63,10 @@ def split_and_copy(pairs: list, val_ratio: float, test_ratio: float):
         lbl_out = DATASET_DIR / "labels" / split
         img_out.mkdir(parents=True, exist_ok=True)
         lbl_out.mkdir(parents=True, exist_ok=True)
-        for img_path, lbl_path in split_pairs:
-            shutil.copy2(img_path, img_out / img_path.name)
-            shutil.copy2(lbl_path, lbl_out / lbl_path.name)
+        for img_path, lbl_path, source_tag in split_pairs:
+            dest_stem = f"{source_tag}_{img_path.stem}"
+            shutil.copy2(img_path, img_out / f"{dest_stem}{img_path.suffix}")
+            shutil.copy2(lbl_path, lbl_out / f"{dest_stem}.txt")
 
     return {k: len(v) for k, v in splits.items()}
 
@@ -84,7 +90,7 @@ def main(val_ratio: float = 0.15, test_ratio: float = 0.05, seed: int = 42):
         pairs = collect_pairs(source)
         source_counts[source.name] = len(pairs)
         print(f"  {source.name}: {len(pairs)} 张有效图片")
-        all_pairs.extend(pairs)
+        all_pairs.extend((img, lbl, source.name) for img, lbl in pairs)
 
     if not all_pairs:
         print("没有找到任何标注数据，请先将图片和标注放入 self_captured/ 或 openclaw/ 目录。")
