@@ -302,18 +302,6 @@ def analyze_vibration(
     }
 
 
-# ── 场景分类（best-effort，可被 --mode 覆盖） ──────────────────────
-def classify_setup(detections: list[dict]) -> str:
-    names = {d["class_name"] for d in detections}
-    if "spring" in names:
-        return "vibration"
-    if "string" in names and "pendulum_bob" in names:
-        return "circular_motion"  # 与 vibration/energy_conservation 存在歧义，建议显式传 --mode
-    if "cart" in names and "track" in names:
-        return "momentum"
-    return "unknown"
-
-
 # ── 入口 ─────────────────────────────────────────────────────────
 def extract_physics(
     mode: str,
@@ -654,8 +642,8 @@ if __name__ == "__main__":
     mock_track = [TrackPoint(t=float(ti), x=float(xi), y=200.0) for ti, xi in zip(t, x)]
 
     mock_detections = [
-        {"class_name": "ruler", "class_id": 5, "confidence": 0.9, "bbox": [10, 10, 10 + px_per_cm * 20, 30]},
-        {"class_name": "spring", "class_id": 3, "confidence": 0.85, "bbox": [80, 150, 120, 250]},
+        {"class_name": "ruler", "class_id": 4, "confidence": 0.9, "bbox": [10, 10, 10 + px_per_cm * 20, 30]},
+        {"class_name": "spring", "class_id": 2, "confidence": 0.85, "bbox": [80, 150, 120, 250]},
     ]
     out = extract_physics(
         "vibration", mock_detections, {"track1": mock_track}, fps,

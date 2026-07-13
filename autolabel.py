@@ -41,6 +41,10 @@ from pathlib import Path
 # 2026-07-11 第四轮：删除 pendulum_bob 类（首轮训练验证集/训练集都是 0 实例，
 # 混淆矩阵整行整列空白），原提示词 "ball" 一并去掉；后续 string/ruler/
 # dynamometer 的 id 相应减 1，与新版 dataset.yaml（6 类）对齐。
+#
+# 2026-07-13：曾短暂试过"删 spring 加 timer"的方案（第五轮），随后确认这不是
+# 最终决定，已还原成本文件当前这版——spring(2) 仍不主动标注（早前测过误检率
+# 太高，7个真实实例改为人工在网页编辑器里手动标的），没有 timer 类。
 PROMPT_TO_CLASS = {
     "cart": 0,
     "aluminum track rail": 1,

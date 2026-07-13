@@ -25,8 +25,8 @@ DEFAULT_IMAGE = PROJ_DIR / "testi.png"
 
 # 本项目最终需要识别的力学器材（对照组，来自 data/dataset.yaml 的 6 类；
 # pendulum_bob 已删除，ruler 仅训练不参与 detect.py 输出，此处仍列出供参考）
-EXPECTED_ELEMENTS = ["cart/小车", "track/导轨", "spring/裸弹簧(已停用)",
-                     "string/细线", "ruler/标定尺(仅训练)", "dynamometer/弹簧测力计"]
+EXPECTED_ELEMENTS = ["cart/小车", "track/导轨", "spring/裸弹簧", "string/细线",
+                     "ruler/标定尺(仅训练)", "dynamometer/弹簧测力计"]
 
 
 def run(image_path: Path, model_name: str, conf: float, save_dir: Path):

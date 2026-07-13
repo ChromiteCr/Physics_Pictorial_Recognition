@@ -27,8 +27,6 @@ OUT_HTML = PROJ / "output" / "label_gallery.html"
 NAMES = {0: "cart", 1: "track", 2: "spring", 3: "string", 4: "ruler", 5: "dynamometer"}
 COLORS_HEX = {0: "#ff8000", 1: "#808080", 2: "#0078ff",
               3: "#c800c8", 4: "#00c8c8", 5: "#0000ff"}
-COLORS_BGR = {0: (255, 128, 0), 1: (128, 128, 128), 2: (0, 120, 255),
-              3: (200, 0, 200), 4: (0, 200, 200), 5: (0, 0, 255)}
 IMG_MAX = 620  # 兼顾编辑精度和文件体积；YOLO坐标是归一化的，缩放不影响导出精度
                 # （Artifact 单文件上限16MB，266张图要控制在这个尺寸内）
 JPEG_QUALITY = 65
