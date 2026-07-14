@@ -3,12 +3,15 @@
 
 用法：
     python prepare_dataset.py [--val-ratio 0.15] [--test-ratio 0.05]
+    python prepare_dataset.py --exclude openclaw   # 打包训练集但不含 openclaw 来源
 
 数据放置规则：
   - data/self_captured/images/  放自己拍摄的图片（.jpg/.png）
   - data/self_captured/labels/  放对应的 YOLO 格式标注（.txt，与图片同名）
   - data/openclaw/images/       放 OpenClaw 下载的图片
   - data/openclaw/labels/       放对应标注
+  - data/video_frames/images/   放 extract_video_frames.py 抽出的视频帧
+  - data/video_frames/labels/   放对应标注（autolabel_glm.py 生成 + 人工校对）
 
 运行后生成：
   - data/dataset/images/{train,val,test}/
@@ -20,7 +23,7 @@ import random
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
-SOURCES = [DATA_DIR / "self_captured", DATA_DIR / "openclaw"]
+SOURCES = [DATA_DIR / "self_captured", DATA_DIR / "openclaw", DATA_DIR / "video_frames"]
 DATASET_DIR = DATA_DIR / "dataset"
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
@@ -71,8 +74,13 @@ def split_and_copy(pairs: list, val_ratio: float, test_ratio: float):
     return {k: len(v) for k, v in splits.items()}
 
 
-def main(val_ratio: float = 0.15, test_ratio: float = 0.05, seed: int = 42):
+def main(val_ratio: float = 0.15, test_ratio: float = 0.05, seed: int = 42,
+         exclude: list[str] = ()):
     random.seed(seed)
+
+    sources = [s for s in SOURCES if s.name not in exclude]
+    if exclude:
+        print(f"排除来源: {', '.join(exclude)}")
 
     # 清空旧数据集
     for split in ("train", "val", "test"):
@@ -84,7 +92,7 @@ def main(val_ratio: float = 0.15, test_ratio: float = 0.05, seed: int = 42):
 
     all_pairs = []
     source_counts = {}
-    for source in SOURCES:
+    for source in sources:
         if not source.exists():
             continue
         pairs = collect_pairs(source)
@@ -116,5 +124,7 @@ if __name__ == "__main__":
     parser.add_argument("--val-ratio", type=float, default=0.15)
     parser.add_argument("--test-ratio", type=float, default=0.05)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--exclude", nargs="*", default=[],
+                         help="排除的来源目录名（如 --exclude openclaw），默认全部来源都用")
     args = parser.parse_args()
-    main(args.val_ratio, args.test_ratio, args.seed)
+    main(args.val_ratio, args.test_ratio, args.seed, exclude=args.exclude)

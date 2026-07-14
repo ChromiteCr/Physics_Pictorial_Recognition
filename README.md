@@ -1,320 +1,181 @@
-# Physics Pictorial Recognition 物理图像识别系统
+# 力学实验智能助教 Physics Pictorial Recognition
 
-一个基于 **YOLOv8 深度学习** 的物理实验图像识别与自动分析系统。该系统能够自动识别物理实验装置（弹簧、木块、弹簧测力计等），从图像中提取关键物理量，并生成可视化的力图动画。
+一个面向中学物理力学实验的智能识别与讲解系统：拍一张实验初状态照片，**YOLOv8** 自动识别器材，人工核对/画框补标注后，**规则+GLM** 判断这是哪种实验，手填实测数据算出物理量，再生成示意动画和 **GLM** 讲解。
 
 ## 📋 项目概述
 
-本项目旨在将计算机视觉与物理学结合，实现物理实验的智能化识别和分析。系统能够：
-- 🔍 自动检测物理实验中的各类物体
-- 📐 计算物体之间的空间关系和物理量
-- 📊 生成力图及动画演示
-- 💾 导出结构化的物理分析报告
+系统分两部分，对应网页上的两个选项卡：
 
-## 🎯 核心功能
+- **① 识别初状态**：上传照片 → YOLOv8 识别器材 → 网页上人工核对/修正（含拖框手动补标注）
+- **② 实验分析**：确认后的器材 → 意图识别（规则表打分，拿不准时调 GLM 兜底，可随时手动改）→
+  按实验类型动态生成输入表单，填实测数据 → 计算物理量 + 生成示意动画 + GLM 讲解/公式/知识点清单
 
-### 1. 目标检测 (Object Detection)
-支持识别 **5 类物体**：
-- `wooden_block` - 木块
-- `iron_block` - 铁块  
-- `spring` - 弹簧
-- `string` - 细绳
-- `dynamometer` - 弹簧测力计
+物理量不再依赖 CV 在照片里量出来——小样本 YOLO 精度不够、标定链路也不稳，所以实测数据都是用户看着实物手动输入，YOLO 只负责"这张照片里有什么器材"这一步。
 
-### 2. 物理量提取 (Physics Extraction)
-- **像素标定** - 通过弹簧测力计的已知尺寸（16cm）推算缩放比例
-- **弹簧形变计算** - 自动测量弹簧当前长度和形变量 (ΔL)
-- **受力分析** - 推断物体所受的力（重力、弹力、拉力等）
-- **胡克定律应用** - F = k·x 公式计算弹力大小
+**网页交互细节**：
 
-### 3. 可视化输出 (Visualization)
-- **力图叠加** - 在原图上绘制彩色力箭头和标签
-- **弹簧动画** - 生成 GIF 动画展示弹簧伸长过程
+- 顶部是 `① 识别初状态` / `② 实验分析` 两个选项卡（不是侧边栏），黑板粉笔风格视觉主题
+- Part 1 检测完之后，除了表格里改类别/删行，还能直接在图上拖框圈出模型漏检的器材
+- YOLO 推理、GLM 调用、动画生成这些耗时操作，都有统一的黑板粉笔风格加载进度条（不是原生 spinner）
+- Part 2 的计算结果用指标卡片 + 结论徽章 + 公式条展示，不是一坨 `st.json`，避免学生把结果误认成代码
+
+## 🎯 支持的实验类型
+
+| 实验 | 学段 | 必需器材 |
+| --- | --- | --- |
+| 探究摩擦力大小的影响因素 | 初中 | 测力计 + (小车 或 木块) |
+| 测量平均速度 | 初中 | 小车 + 导轨 |
+| 弹簧测力计原理 / 胡克定律初步 | 初中 | 测力计 |
+| 验证牛顿第二定律 | 高中 | 小车 + 导轨 |
+| 验证动量守恒定律 | 高中 | 2 辆小车 + 导轨 + 细线 |
+| 验证机械能守恒定律 | 高中 | 小车 + 导轨 |
+
+完整定义（输入字段、计算公式）见 [physics.py](physics.py) 里的 `EXPERIMENT_TYPES` 注册表。
+
+## 🔍 目标检测（Part 1）
+
+YOLOv8 训练集共 **8 类**编号（编号固定不挪用，即使某类不再用于推理也保留占位）：
+
+| id | 类别 | 说明 |
+| --- | --- | --- |
+| 0 | `cart` | 小车 |
+| 1 | `track` | 导轨/轨道（含底座支架类支撑结构） |
+| 2 | `spring` | ~~弹簧~~（占位保留，标注/推理全程忽略） |
+| 3 | `string` | 细线 |
+| 4 | `ruler` | ~~标定尺~~（占位保留，标注/推理全程忽略，原因见 detect.py 注释） |
+| 5 | `dynamometer` | 弹簧测力计整机 |
+| 6 | `wooden_block` | 木块 |
+| 7 | `iron_block` | 铁块/钢球 |
+
+`spring`、`ruler` 两类在 `detect.py` 的 `EXCLUDED_FROM_DETECT` 里被过滤，推理结果不会输出，但编号不重新分配给别的类别。
+
+第三轮训练（8 类，1296 图，V100 32GB）验证集 mAP@0.5 = **0.743**：
+
+| 类别 | mAP50 | 备注 |
+| --- | --- | --- |
+| cart | 0.977 | 很好 |
+| wooden_block | 0.800 | 好 |
+| track | 0.814 | 好 |
+| dynamometer | 0.793 | 好 |
+| string | 0.560 | 好，由于内容过小，建议人工核对 |
+| iron_block | 0.512 | 一般，建议人工核对 |
 
 ## 🚀 快速开始
 
 ### 环境要求
+
 ```bash
-Python >= 3.8
+Python >= 3.10
 ```
 
 ### 安装依赖
+
 ```bash
-pip install ultralytics opencv-python numpy matplotlib pillow
+pip install -r requirements.txt
 ```
+
+硬件相关的 torch 安装方式见 `requirements.txt` 开头注释（按租用 GPU 架构选 CUDA 版本）。
+
+### 启动网页
+
+```bash
+streamlit run app.py
+```
+
+想用 GLM 相关功能（意图识别兜底、生成讲解）需要先设置环境变量 `GLM_API_KEY`（或 `ZHIPUAI_API_KEY`）；没配也能跑，只是这两处会显示警告，不影响器材识别/物理计算/动画。
 
 ### 项目结构
-```
-Physics_Pictorial_Recognition/
-├── README.md                      # 项目说明
-├── train.py                       # 模型训练脚本
-├── detect.py                      # 推理入口
-├── physics.py                     # 物理量提取模块
-├── animate.py                     # 可视化和动画模块
-├── prepare_dataset.py             # 数据集准备脚本
+
+```text
+Proj/
+├── .streamlit/config.toml    # 网页主题配色 + 关闭热重载(避免 torch 内省报错)
+├── app.py                    # Streamlit 网页入口（Part 1 + Part 2）
+├── detect.py                 # Part 1：YOLO 器材识别
+├── physics.py                # Part 2：EXPERIMENT_TYPES 注册表 + 物理量计算
+├── intent_classifier.py      # Part 2：实验意图识别（规则 + GLM 兜底）
+├── animate.py                # Part 2：示意动画生成
+├── explain_api.py            # Part 2：GLM 讲解/公式/知识点生成
+├── train.py                  # YOLOv8 训练脚本
+├── prepare_dataset.py        # 合并各来源数据集，切分 train/val/test
+├── extract_video_frames.py   # 从实验视频抽帧
+├── autolabel_glm.py          # 用 GLM 多模态模型辅助标注抽出的帧
+├── autolabel.py               # 用 Grounding DINO 零样本辅助标注
+├── gen_label_gallery.py      # 生成标注结果的可视化网页，方便人工核对
+├── class_descriptions.json   # GLM 自动标注用的类别描述（可编辑）
+├── requirements.txt
 └── data/
+    ├── dataset.yaml               # YOLO 数据集配置（8 类）
     ├── self_captured/             # 自拍数据
-    │   ├── images/                # 图片文件
-    │   └── labels/                # YOLO 格式标注
-    ├── openclaw/                  # 公开数据
-    │   ├── images/
-    │   └── labels/
-    └── dataset/                   # 合并后的训练集（自动生成）
-        ├── images/
-        │   ├── train/
-        │   ├── val/
-        │   └── test/
-        └── labels/
-            ├── train/
-            ├── val/
-            └── test/
+    ├── openclaw/                  # 网络补充数据
+    ├── video_frames/              # 视频抽帧 + GLM/人工标注
+    │   ├── frame_hints.json       # 每张帧的"预期包含物体"提示（喂给 GLM）
+    │   └── images/ labels/
+    └── dataset/                   # 合并后的训练集（prepare_dataset.py 自动生成）
+        ├── images/{train,val,test}/
+        └── labels/{train,val,test}/
 ```
 
-## 📚 使用指南
+## 📚 训练一个新模型
 
-### 步骤 1: 准备训练数据
+### 1. 准备标注数据
 
-将标注好的数据放入 `data/` 目录：
+三种数据来源，标注格式统一是 YOLO `.txt`（`<class_id> <x_center> <y_center> <width> <height>`，坐标 0-1 归一化）：
 
-**YOLO 格式标注说明** (.txt 文件):
-```
-<class_id> <x_center> <y_center> <width> <height>
-```
-其中坐标均为相对值（0-1 之间）。
+- `data/self_captured/` — 自己拍摄的照片，人工标注为主
+- `data/openclaw/` — 网络补充图片
+- `data/video_frames/` — 从实验视频抽帧，走 `extract_video_frames.py` → `autolabel_glm.py`
+  自动预标注 → `gen_label_gallery.py` 生成网页核对 → 人工修正后放回对应 `labels/`
 
-**类别编号**：
-- 0: wooden_block
-- 1: iron_block
-- 2: spring
-- 3: string
-- 4: dynamometer
-
-**文件放置**：
-```
-data/self_captured/
-├── images/
-│   ├── exp1.jpg
-│   ├── exp2.jpg
-│   └── ...
-└── labels/
-    ├── exp1.txt
-    ├── exp2.txt
-    └── ...
-```
-
-### 步骤 2: 数据集准备
-
-合并自拍数据和公开数据集，分割为训练/验证/测试集：
+### 2. 合并数据集
 
 ```bash
 python prepare_dataset.py --val-ratio 0.15 --test-ratio 0.05
+python prepare_dataset.py --exclude openclaw   # 打包训练集但不含网络图片
 ```
 
-**参数说明**：
-- `--val-ratio`: 验证集比例（默认 15%）
-- `--test-ratio`: 测试集比例（默认 5%）
-- `--seed`: 随机种子（默认 42）
-
-输出示例：
-```
-self_captured: 50 张有效图片
-openclaw: 120 张有效图片
-
-数据集已生成（共 170 张）:
-  train: 138 张
-  val  : 25 张
-  test : 7 张
-```
-
-### 步骤 3: 训练模型
-
-使用 YOLOv8 训练目标检测模型：
+### 3. 训练
 
 ```bash
 python train.py
 ```
 
-**训练配置**（可在 train.py 中修改）：
-- 模型: YOLOv8 Small (`yolov8s.pt`)
-- 轮数: 100 epoch
-- 批大小: 16
-- 图像尺寸: 640×640
-- 设备: GPU 0 (如无 GPU，改为 "cpu")
+配置（模型大小、epoch、batch、设备）在 `train.py` 顶部改，输出权重在
+`runs/detect/train/weights/best.pt`（`detect.py` 的默认权重路径）。
 
-**输出**：
-```
-runs/detect/train/
-├── weights/
-│   ├── best.pt          # 最优权重 ⭐
-│   └── last.pt
-└── results.csv
-```
-
-训练完成后会输出 mAP@0.5 指标。
-
-### 步骤 4: 推理与分析
-
-对新图片进行检测和物理分析：
+### 4. 命令行单独测试识别效果
 
 ```bash
-python detect.py test_image.jpg --conf 0.25
+python detect.py 照片.jpg --conf 0.25
 ```
 
-**参数说明**：
-- `image`: 输入图片路径（必需）
-- `--weights`: 模型权重路径（默认使用训练好的 best.pt）
-- `--conf`: 置信度阈值，0.0-1.0（默认 0.25）
-- `--save-dir`: 输出目录（默认 output/）
-
-**输出文件**：
-```
-output/
-├── test_image_detected.jpg        # 检测结果图（带 bounding box）
-├── test_image_physics.json        # 物理量提取报告
-├── test_image_force_overlay.jpg   # 力图叠加图
-└── test_image_animation.gif       # 弹簧动画（如有弹簧）
-```
-
-## 📊 输出示例
-
-### 检测结果图 (detected.jpg)
-在原图上绘制彩色 bounding box，每个框标注类别和置信度。
-
-### 物理分析报告 (physics.json)
-```json
-{
-  "calibration": {
-    "px_per_cm": 10.35,
-    "note": "基于弹簧测力计尺寸估算"
-  },
-  "spring": {
-    "deformation_cm": 2.45,
-    "natural_length_cm": 5.0,
-    "force_n": null,
-    "spring_constant": null
-  },
-  "forces": [
-    {
-      "magnitude": 0.0,
-      "angle_deg": 270.0,
-      "origin_xy": [128, 320],
-      "label": "重力 G"
-    },
-    {
-      "magnitude": 0.0,
-      "angle_deg": 90.0,
-      "origin_xy": [128, 290],
-      "label": "弹力 F=0.00N"
-    }
-  ],
-  "detected_classes": ["wooden_block", "spring", "dynamometer"]
-}
-```
-
-### 力图叠加 (force_overlay.jpg)
-在原图上绘制彩色力箭头，箭头长度和方向代表力的大小和方向。
-
-### 弹簧动画 (animation.gif)
-展示弹簧从自然状态渐进式伸长的过程，同时显示胡克定律公式 F = k·x。
-
-## 🔧 核心模块详解
-
-### physics.py - 物理量提取
-
-**主要函数**：
-
-```python
-def calibrate(detections, img_shape) -> float:
-    """计算像素/厘米比例，基于弹簧测力计尺寸"""
-
-def extract_spring_deformation(detections, px_per_cm) -> SpringInfo:
-    """提取弹簧形变信息"""
-
-def compute_force_diagram(detections, px_per_cm) -> list[Force]:
-    """计算物体受力情况"""
-
-def extract_physics(detections, img_shape) -> dict:
-    """完整物理量提取入口"""
-```
-
-### animate.py - 可视化和动画
-
-```python
-def draw_force_overlay(image_path, physics_data, save_path):
-    """在原图上叠加力箭头"""
-
-def generate_spring_animation(spring_info, save_path):
-    """生成弹簧伸长动画 GIF"""
-```
-
-### detect.py - 推理流程
-
-整合完整的推理管线：
-1. 加载 YOLOv8 模型
-2. 执行目标检测
-3. 提取物理量
-4. 生成可视化输出
-
-## 📈 训练建议
-
-### 数据要求
-- **最小训练集**: 50-100 张图片
-- **推荐训练集**: 200+ 张图片
-- **图片分辨率**: 640×480 以上
-- **标注精度**: 确保 bounding box 准确标注
-
-### 优化策略
-如果训练精度不理想：
-- 增加训练数据量
-- 将模型改为 YOLOv8 Medium: `MODEL = "yolov8m.pt"`
-- 增加训练轮数: `EPOCHS = 150`
-- 调整数据增强参数
-
-### 性能优化
-- 使用 GPU 加速：确保 CUDA 环境配置正确
-- 调整 batch_size: 若显存不足，改为 8；若显存充足，改为 32
+输出 `<名称>_detected.jpg`（带框结果图）和 `<名称>_components.json`（器材列表）。
 
 ## 🛠️ 常见问题
 
+**Q: 服务器上 `import cv2` 报 `libGL.so.1` 找不到？**
+A: 精简版云服务器镜像常缺这个系统 OpenGL 库。项目里全程没用 cv2 的 GUI 函数，
+`requirements.txt` 已经用 `opencv-python-headless` 代替完整版，装它就不需要这个系统库了。
+
 **Q: 训练时出现 CUDA 错误？**
-A: 改为 CPU 训练。在 train.py 中设置 `DEVICE = "cpu"`。
+A: 改 `train.py` 里 `DEVICE = "cpu"`；GPU 架构和 CUDA 版本要求见 `requirements.txt`/`train.py` 顶部注释。
 
-**Q: 模型找不到权重文件？**
-A: 确保已运行 `train.py` 完成训练，权重文件应在 `runs/detect/train/weights/best.pt`。
+**Q: 检测精度很低（尤其 string / iron_block）？**
+A: 这两类目前训练数据不够，`app.py` 的 Part 1 页面里可以直接在图上拖框手动补标注，
+或者往 `data/video_frames/` 补更多样本重新训练。
 
-**Q: 检测精度很低？**
-A: 检查训练数据标注质量，确保数据多样性；尝试增加训练数据或训练轮数。
+**Q: GLM API 报 429 限速？**
+A: `autolabel_glm.py` 内置指数退避重试，也支持断点续标——直接重跑同一条命令，
+已经标注成功的图片会自动跳过，只补标失败的。
 
-**Q: 物理计算结果不正确？**
-A: 物理模块需要精确的标定。确保弹簧测力计完整出现在图片中。
+## 📝 版本记录
 
-## 📝 项目状态
-
-✅ **已完成**：
-- 完整的检测管线
-- 物理模块框架设计
-- 可视化和动画生成
-
-🚧 **进行中**：
-- 收集和标注大规模训练数据
-- 优化物理计算算法
-- 测试和验证
-
-## 🔮 未来计划
-
-- [ ] 支持更多物体类型（重锤、滑轮等）
-- [ ] 实现动态物体追踪和轨迹分析
-- [ ] 增加摩擦力等复杂物理模型
-- [ ] 开发 Web 界面
-- [ ] 导出可编辑的物理图表
+| 版本 | 日期       | 变更内容                                                                                                   | 类型      |
+| ---- | ---------- | ------------------------------------------------------------------------------------------------------------ | --------- |
+| P1b1 | 2026-07-14 | GLM 讲解的知识点清单改成"术语+简短展开"结构，不再是光秃秃的术语词条                                        | fix       |
+| P1b  | 2026-07-14 | 所有耗时操作加黑板粉笔风格加载进度条；Part 2 计算结果改用指标卡片+徽章展示，不再用 st.json                     | feat      |
+| P1a  | 2026-07-14 | 选项卡式导航替换侧边栏；黑板粉笔视觉主题；Part 1 支持拖框手动补标注（含 streamlit-drawable-canvas 兼容性修复） | feat      |
+| P1   | 2026-07-14 | 打通 Part 1(8 类 YOLO 器材识别) + Part 2(意图识别/物理计算/动画/GLM讲解) 全链路，第三轮训练 mAP@0.5=0.577      | milestone |
 
 ## 📄 许可证
 
 MIT License
-
-## 👤 作者
-
-ChromiteCr
-
-## 📧 反馈与建议
-
-如有任何问题或建议，欢迎提交 Issue 或 Pull Request！

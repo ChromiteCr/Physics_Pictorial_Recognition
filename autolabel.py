@@ -45,11 +45,14 @@ from pathlib import Path
 # 2026-07-13：曾短暂试过"删 spring 加 timer"的方案（第五轮），随后确认这不是
 # 最终决定，已还原成本文件当前这版——spring(2) 仍不主动标注（早前测过误检率
 # 太高，7个真实实例改为人工在网页编辑器里手动标的），没有 timer 类。
+#
+# 2026-07-14 第六轮：按要求在所有标注代码里忽略 ruler 类（track/ruler 混淆严重，
+# detect.py 早就主动过滤掉它的推理结果），去掉 "measuring ruler with markings"
+# 提示词；class id 4 仍保留在 dataset.yaml 里占位，不挪作他用。
 PROMPT_TO_CLASS = {
     "cart": 0,
     "aluminum track rail": 1,
     "thin string": 3,
-    "measuring ruler with markings": 4,
     "spring scale dynamometer": 5,
 }
 BOX_THRESHOLD = 0.25

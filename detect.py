@@ -35,6 +35,8 @@ CLASS_NAMES = {
     3: "string",
     4: "ruler",
     5: "dynamometer",
+    6: "wooden_block",
+    7: "iron_block",
 }
 
 CLASS_COLORS = {
@@ -44,13 +46,20 @@ CLASS_COLORS = {
     3: (200, 0, 200),
     4: (0, 200, 200),
     5: (0, 0, 255),
+    6: (45, 82, 160),
+    7: (47, 107, 85),
 }
 
 # [2026-07-11] ruler 类仍参与训练（dataset.yaml 里保留），但检测结果里主动过滤掉
 # 它：首轮训练混淆矩阵显示 track 真实类 0% 被正确识别、57% 被误判成 ruler，框经常
 # 横跨大半张图，画出来/报出来都是噪声。calibrate() 因此拿不到 ruler，但 Part 2
 # 已经不靠它做标定了（改成用户手动输入真实物理量），不影响新架构。
-EXCLUDED_FROM_DETECT = {"ruler"}
+# [2026-07-14] spring 也加入排除：按要求在所有标注/推理代码里忽略该类，编号 2
+# 仍保留在 dataset.yaml 里占位，不重新用于训练标注，推理结果也不再输出。
+# [2026-07-14 第三轮训练后] CLASS_NAMES/CLASS_COLORS 补上 wooden_block(6)/
+# iron_block(7)——第三轮用的 8 类数据集新增了这两类，之前一直没同步，会导致
+# 新模型对这两类的检测结果全部被 CLASS_NAMES.get(...,"unknown") 吃掉。
+EXCLUDED_FROM_DETECT = {"ruler", "spring"}
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 

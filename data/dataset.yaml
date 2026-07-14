@@ -14,23 +14,36 @@ train: images/train
 val: images/val
 test: images/test
 
-nc: 6
+nc: 8
 names:
   0: cart            # 小车（动量定理碰撞实验、能量守恒斜面实验）
-  1: track           # 导轨/轨道（含斜面，定位与场景分类用）
-  2: spring          # 裸弹簧。曾短暂改成 timer 方案又改回——2026-07-13 确认维持
-                     # 这个旧方案，spring 类保留，非停用（本轮网页编辑器人工标了
-                     # 7 个真实实例，按用户要求保留原样，不是噪声删除）
+  1: track           # 导轨/轨道（含斜面，定位与场景分类用）；2026-07-14 起也吸收
+                     # 了原 base(8) 类——底座/支架统一按 track 标注，不再单独成类
+  2: spring          # [2026-07-14 起忽略] 裸弹簧。此前保留过 7 个真实标注实例，
+                     # 现按要求在所有标注/推理代码里忽略该类，但编号 2 不挪作他用，
+                     # 保留占位，历史标注数据不用回改
   3: string          # 细线（摆动、圆周运动用绳）
-  4: ruler           # [仅训练，detect.py 不输出] 标定参考尺，实测检测噪声极大
-                     # （track/ruler 混淆严重，混淆矩阵显示 track 真实类 0% 被
-                     # 正确识别、57% 被误判成 ruler），detect.py 主动过滤掉它的
-                     # 检测结果；因此 calibrate() 目前拿不到 ruler 框，px/cm
-                     # 标定暂时失效，需要另找标定方式（见 detect.py 顶部说明）
+  4: ruler           # [2026-07-14 起忽略] 标定参考尺。此前是"仅训练，detect.py
+                     # 不输出"（track/ruler 混淆严重，混淆矩阵显示 track 真实类
+                     # 0% 被正确识别、57% 被误判成 ruler），现按要求在所有标注/
+                     # 推理代码里忽略该类，编号 4 保留占位不挪作他用
   5: dynamometer     # 弹簧测力计（整个测力仪器，含外壳/刻度/挂钩，区别于裸弹簧）
+  6: wooden_block    # [2026-07-14 新增] 木块，摩擦力/牛顿第二定律实验里被拖动的
+                     # 物块，跟 cart(0，带轮小车) 是不同物体，视频 38815401569-*
+                     # 和 38815465709-* 里出现
+  7: iron_block      # [2026-07-14 新增] 钢球，暂按用户要求先作为独立类训练；
+                     # 后续可能与 wooden_block(6) 合并成同一个"可替换配重物块"
+                     # 类别，合并方案待定，先分开训练不影响当前标注
 
 # [2026-07-11] 删除 pendulum_bob 类：首轮训练验证集里 0 个真实实例，训练集也是
 # 0 实例，模型完全没学过，混淆矩阵里这一类整行整列空白。要重新启用得先补拍。
 # [2026-07-13] 一度改成"去 spring 加 timer"的 6 类方案，随后确认这不是最终决定，
 # 已还原成本文件当前这版（有 spring、无 timer），跟 autolabel.py/gen_label_gallery.py
 # 生成的实际标注文件编号一致，训练前必须保持三者同步。
+# [2026-07-14] 新增 wooden_block(6)/iron_block(7) 两类，来自 data/video/ 补拍素材
+# 人工描述（见 data/video_frames/frame_hints.json），走 autolabel_glm.py 标注路线，
+# 不经过 autolabel.py（Grounding DINO 路线）；三者同步规则里的 autolabel.py 部分
+# 对这两类不适用，只需 dataset.yaml/autolabel_glm.py/gen_label_gallery.py 三者 id
+# 保持一致。同一天内曾短暂新增过 base(8) 类，随后决定合并进 track(1)、不单独成类，
+# nc 从 9 改回 8；spring(2)/ruler(4) 也在同一天改为"所有代码里忽略，但编号保留
+# 占位不挪用"。

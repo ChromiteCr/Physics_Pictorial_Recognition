@@ -1,0 +1,19 @@
+# 2026-07-14：关掉文件热重载监听器。Streamlit 默认会扫描已导入模块的路径来
+# 支持代码改动自动刷新，但它内省 torch.classes.__path__._path 时会触发
+# torch 内部异常（RuntimeError: Tried to instantiate class '__path__._path'...），
+# 跟本项目代码无关，是 streamlit+torch 的已知兼容性问题，不影响实际推理结果，
+# 但会在终端刷屏 traceback。项目里也没依赖热重载来调试，直接关掉更清爽。
+[server]
+fileWatcherType = "none"
+
+# 2026-07-14：黑板粉笔实验记录本配色——深墨绿黑板底、奶白粉笔字、黄粉笔强调色。
+# 用原生 [theme] 覆盖大部分组件（按钮/滑块/输入框/提示框），字体和签名细节
+# 另外在 app.py 里用注入 CSS 补（data_editor 内部是 canvas 渲染，CSS 管不到，
+# 不强求）。
+[theme]
+base = "dark"
+primaryColor = "#eec25f"
+backgroundColor = "#1c2b23"
+secondaryBackgroundColor = "#24362c"
+textColor = "#f3efe0"
+font = "sans serif"

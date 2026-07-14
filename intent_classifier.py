@@ -84,6 +84,12 @@ def classify_intent(detections: list[dict]) -> list[dict]:
         if exp_id == "momentum_conservation" and name_counts.get("cart", 0) < 2:
             continue
 
+        # 摩擦力实验的 required_components 只写了 dynamometer（见 physics.py 注释），
+        # 因为被拉动的物体可以是 cart 也可以是 wooden_block；这里必须至少出现
+        # 其中一个，否则单独一个测力计会被误判成摩擦力实验（跟胡克定律撞车）
+        if exp_id == "friction" and not ({"cart", "wooden_block"} & name_set):
+            continue
+
         score = 1.0
         reasons = [f"检测到必需器材：{', '.join(sorted(required))}"]
 
@@ -100,10 +106,13 @@ def classify_intent(detections: list[dict]) -> list[dict]:
             reasons.append(f"额外匹配可选器材：{', '.join(sorted(matched_optional))}")
 
         if exp_id == "friction":
-            bonus = _proximity_bonus(detections, "dynamometer", "cart")
+            bonus = max(
+                _proximity_bonus(detections, "dynamometer", "cart"),
+                _proximity_bonus(detections, "dynamometer", "wooden_block"),
+            )
             if bonus:
                 score += bonus
-                reasons.append("测力计与小车位置接近，符合摩擦力实验典型摆法")
+                reasons.append("测力计与被拉动物体（小车/木块）位置接近，符合摩擦力实验典型摆法")
 
         candidates.append({
             "experiment_id": exp_id,

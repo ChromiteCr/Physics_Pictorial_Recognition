@@ -152,7 +152,8 @@ def generate_explanation(
         image_path: 可选，初状态照片，让 GLM 结合实际画面讲解更具体
 
     Returns:
-        {"explanation": str, "formulas": list[str], "knowledge_points": list[str]}
+        {"explanation": str, "formulas": list[str],
+         "knowledge_points": list[{"term": str, "detail": str}]}
     """
     prompt = f"""你是一名{level}物理教师，正在给学生讲解一个刚完成的实验。
 
@@ -164,13 +165,19 @@ def generate_explanation(
 1. 一段面向{level}学生的实验讲解（说清楚做了什么、结果说明了什么，语言通俗，
    200-400字）
 2. 涉及的物理公式列表（LaTeX 或纯文本均可，只列这个实验真正用到的公式）
-3. 一份知识点清单（3-6条，对应本地教材大纲里这个实验考察的知识点）
+3. 一份知识点清单（3-6条，对应本地教材大纲里这个实验考察的知识点）。每条不能只给
+   术语名字，要配一句 30-60 字的简短展开，讲清楚这个知识点具体指什么、跟这个实验
+   哪里对应上了——比如不能只写"二力平衡"，要写清楚二力平衡的条件，以及本实验里
+   哪两个力构成了这对平衡力。
 
 严格按下面的 JSON 格式回复，不要有多余文字：
 {{
   "explanation": "讲解文字",
   "formulas": ["公式1", "公式2"],
-  "knowledge_points": ["知识点1", "知识点2", "知识点3"]
+  "knowledge_points": [
+    {{"term": "知识点名称1", "detail": "该知识点的简短展开说明"}},
+    {{"term": "知识点名称2", "detail": "该知识点的简短展开说明"}}
+  ]
 }}"""
 
     raw = _chat(prompt, image_path=image_path)

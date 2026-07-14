@@ -532,8 +532,12 @@ EXPERIMENT_TYPES: dict[str, dict] = {
     "friction": {
         "name": "探究摩擦力大小的影响因素",
         "level": "初中",
-        "required_components": {"cart", "track", "dynamometer"},
-        "optional_components": {"string"},
+        # [2026-07-14] 被拉动的物体可以是小车(cart，在导轨上)也可以是木块
+        # (wooden_block，在木板/砂纸/棉布/玻璃等不同接触面上)——两种拍摄场景
+        # 都算这个实验。这里只放最基础的 dynamometer，cart/wooden_block 二选一
+        # 的判断交给 intent_classifier.classify_intent() 的特判逻辑。
+        "required_components": {"dynamometer"},
+        "optional_components": {"cart", "wooden_block", "track", "string"},
         "input_fields": [
             InputField("dynamometer_reading_n", "弹簧测力计示数", "N"),
             InputField("surface_material", "接触面材质", type="select",

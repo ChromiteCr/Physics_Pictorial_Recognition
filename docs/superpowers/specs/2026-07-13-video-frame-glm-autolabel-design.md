@@ -71,6 +71,36 @@
 5. python train.py（在 RTX 5090 上跑，不在本机）
 ```
 
+## 追加（2026-07-14）：自定义类别描述 + 每图物体提示
+
+实施时按用户要求追加了两个可配置输入，让 GLM 标注可以结合人工先验，而不是每张图都盲检全部类别：
+
+- **`class_descriptions.json`**（项目根目录）：每个类别喂给 GLM 的文字描述，纯 JSON，key 是类别英文名、value 是中文描述。用户可以随时编辑这个文件调整措辞，不用碰 `autolabel_glm.py` 代码。文件不存在或某个类别没写时，代码内置默认描述兜底。
+- **`data/video_frames/frame_hints.json`**：每张抽出的帧"已知包含哪些类别"的人工提示，格式 `{"文件名": ["cart", "track"]}`。`extract_video_frames.py` 每次跑完会自动给新抽出的帧补上空白条目（`[]`），不覆盖已有条目（保留用户已填的内容）。用户可以照着图片手动填几个类别名进去；填了的图片，`autolabel_glm.py` 的 prompt 会说"已知大概率包含 X、Y，优先检测这些"，缩小 GLM 的搜索空间、减少误检；留空的图片仍走全类别检测。
+
+`autolabel_glm.py` 通过 `--class-desc-file`（默认指向 `class_descriptions.json`）和 `--hints-file`（默认不传，需要显式指定如 `data/video_frames/frame_hints.json`）接入这两个文件。
+
+## 追加（2026-07-14）：类别调整——忽略 spring/ruler，base 合并进 track
+
+用户人工描述抽出帧内容时，顺带确认了两处类别口径调整，已同步到 `data/dataset.yaml`、
+`autolabel.py`、`autolabel_glm.py`、`class_descriptions.json`、`gen_label_gallery.py`、
+`detect.py`（`EXCLUDED_FROM_DETECT`）：
+
+- **spring(2)/ruler(4) 在所有标注/推理代码里忽略**：不再出现在 `autolabel.py` 的
+  `PROMPT_TO_CLASS`、`autolabel_glm.py` 的 `CLASS_NAMES`、`gen_label_gallery.py` 的
+  `NAMES`/`COLORS_HEX` 下拉框里，`detect.py` 的 `EXCLUDED_FROM_DETECT` 也加入
+  `"spring"`（`"ruler"` 此前已在）。**编号不回收**：`dataset.yaml` 里 2 和 4 仍然
+  保留占位，避免后来新增的类别把编号往前顶，导致跟已有历史标注数据错位。
+- **base 合并进 track，不单独成类**：本次新增视频帧本来打算给"底座/支架"单独开
+  一个 `base`(8) 类，用户随后决定这类物体直接按 `track` 标注即可。`data/video_frames/
+  frame_hints.json` 里所有 `"base"` 提示词已批量替换成 `"track"`（去重），
+  `dataset.yaml` 的 `nc` 也从 9 改回 8（8 号位直接删除，没有历史数据依赖这个新增
+  没多久的编号，不需要占位）。
+
+调整后的有效类别（`autolabel_glm.py`/`gen_label_gallery.py` 实际会用到的）：
+`cart(0)`、`track(1)`、`string(3)`、`dynamometer(5)`、`wooden_block(6)`、
+`iron_block(7)`——6 个；`spring(2)`、`ruler(4)` 仅在 `dataset.yaml` 里占位。
+
 ## 不做验证说明
 
 代码交付后不在本机执行（无 GPU/内存有限，且抽帧+GLM调用都需要真实视频文件和 API Key）。用户需要在有 API Key 的环境里先跑一小批（比如 `--videos` 限定 1 个文件、`--stride 25`）验证 GLM 返回格式符合预期，再跑全量。

@@ -6,21 +6,46 @@
 *.bmp
 *.webp
 
-# 压缩包
+# 视频文件（实验原始视频，体积大）
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4v
+
+# 压缩包 / 打包产物
 *.tar.gz
+*.tgz
 *.zip
 *.rar
+*.7z
+*.sha256
+
+# 模型权重（可由 train.py 复现，不进版本库）
+*.pt
+*.pth
+*.onnx
+
+# Python 缓存
+__pycache__/
+*.pyc
 
 # macOS
 .DS_Store
 
 # 输出和运行结果
 output/
-runs/
-runs_2/
+runs*/
+# 注意：这里必须用 /train/ 加前导斜杠，只匹配仓库根目录下那个遗留的 train/
+# 训练输出目录；不加斜杠会连 data/dataset/{images,labels}/train/ 这些真正
+# 要保留的训练集切分目录也一起吃掉。
+/train/
 
 # 数据集图片（保留标签文件）
 data/dataset/images/
 data/self_captured/images/
 data/openclaw/images/
+data/video/
+data/video_frames/images/
 self-captured/images/
