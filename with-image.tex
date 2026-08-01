@@ -1,0 +1,446 @@
+\documentclass[12pt]{article}
+\usepackage[top=2cm, bottom=2cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+% ========== Code listing style ==========
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+}
+
+% ========== Header/Footer ==========
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{1pt}
+\lhead{\footnotesize SCPKU 2026}
+\chead{\footnotesize Physics Pictorial Recognition}
+\rhead{\footnotesize Page \thepage}
+\cfoot{}
+
+% ========== Section style ==========
+\titleformat{\section}{\large\bfseries}{\thesection}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{2pt}
+
+% ========== Document ==========
+\begin{document}
+
+% ========== Title Page ==========
+\begin{center}
+  \vspace*{2cm}
+  {\LARGE \textbf{Physics Pictorial Recognition: An End-to-End Deep Learning System for Automated Physics Experiment Analysis}} \\[1.5cm]
+  {\large Bill Gao} \\[0.3cm]
+  {\normalsize SCPKU Project Course, 2026} \\[0.5cm]
+  {\normalsize \url{https://github.com/ChromiteCr/Physics_Pictorial_Recognition}} \\[2cm]
+\end{center}
+
+% ========== Abstract ==========
+\begin{abstract}
+Physics laboratory experiments require students to identify apparatus, measure physical quantities, and perform force analysis manually. This process is time-consuming and error-prone. We present Physics Pictorial Recognition, an end-to-end system that uses YOLOv8 object detection to recognize physics experiment setups from images and extract quantitative physical information. The system identifies eight categories of laboratory objects including carts, tracks, springs, strings, rulers, dynamometers, wooden blocks, and iron blocks. Beyond static detection, the system employs classical computer vision (HSV color thresholding and centroid tracking) to extract motion trajectories from experiment videos, enabling analysis of dynamic processes such as collisions and oscillations. A rule-based intent classifier, backed by GLM-4V as a fallback, automatically determines the experiment type from detected apparatus. The physics module then computes relevant quantities for momentum conservation, mechanical energy conservation, circular motion, and vibration experiments. The pipeline generates annotated images, force diagrams, and animated GIFs. A Streamlit web interface provides interactive visualization where users can verify detections and input measured data. We trained the model on a custom dataset combining self-captured photographs and frames extracted from experiment demonstration videos. Testing on five held-out images achieved 100\% detection accuracy across all object categories. The system demonstrates that combining object detection with domain-specific physics reasoning can produce a practical tool for intelligent experiment analysis.
+\end{abstract}
+
+% ========== Table of Contents ==========
+\newpage
+\tableofcontents
+
+% ========== Introduction ==========
+\newpage
+\section{Introduction}
+
+\subsection{Background}
+
+Physics laboratory education forms an essential part of science curricula, requiring students to observe experimental setups, identify apparatus, measure quantities, and construct analytical models such as free-body diagrams. In traditional settings, students perform all of these steps by hand: recognizing objects in the experimental scene, reading instrument scales, computing forces or velocities, and drawing diagrams. Instructors then evaluate these results individually, a process that scales poorly in large classes.
+
+Several limitations emerge from this manual approach. First, measurement accuracy varies between students and depends on factors like viewing angle and ruler placement. Second, the process of converting a photographic scene into a structured physics analysis (determining which objects are present, how they are connected, and what forces act on them) requires spatial reasoning that many introductory students find challenging. Third, providing timely, individualized feedback on laboratory work is difficult when instructors must review many submissions.
+
+Recent advances in deep learning for computer vision, particularly in object detection, offer a path toward automating parts of this workflow. Modern detectors can localize and classify multiple objects in a single image in real time, making them suitable for educational applications where interactive feedback is desirable.
+
+\subsection{Problem Statement}
+
+This work addresses the following question: \textit{Given a photograph or video of a physics experiment, can we automatically identify the apparatus present, determine the experiment type, and extract physically meaningful quantities?}
+
+The problem decomposes into several sub-tasks:
+\begin{enumerate}[noitemsep]
+  \item Object detection: localize and classify laboratory apparatus in images.
+  \item Intent classification: determine what type of experiment is being performed based on the detected equipment and its spatial arrangement.
+  \item Physical quantity extraction: convert pixel measurements to real-world units and compute relevant physics (velocities, momenta, forces, energies).
+  \item Visualization: produce annotated images, force diagrams, and animations that illustrate the physical analysis.
+\end{enumerate}
+
+\subsection{Contributions}
+
+This paper makes the following contributions:
+\begin{enumerate}[noitemsep]
+  \item A complete pipeline integrating YOLOv8 object detection, rule-based intent classification (with LLM fallback), physics computation, and visualization.
+  \item A classical CV-based motion tracking module using HSV color thresholding for extracting position-time data from experiment videos.
+  \item A physics extraction module covering four experiment types: momentum conservation, mechanical energy conservation, circular motion, and vibration.
+  \item An interactive Streamlit web interface that allows users to upload images/videos, verify detections, input measured data, and receive computed results with LLM-generated explanations.
+  \item A custom dataset combining self-captured images and video frames with YOLO-format annotations for eight object classes.
+\end{enumerate}
+
+% ========== Related Work ==========
+\section{Related Work}
+
+\subsection{Object Detection and the YOLO Family}
+
+Object detection has evolved from hand-crafted feature approaches such as HOG+SVM \cite{dalal2005hog} to deep learning methods. Two-stage detectors like Faster R-CNN \cite{ren2015fasterrcnn} achieve high accuracy but require separate region proposal and classification stages. Single-stage detectors trade some accuracy for speed by performing detection in a single forward pass.
+
+The YOLO (You Only Look Once) series \cite{redmon2016yolo} pioneered single-stage detection by framing localization and classification as a unified regression problem. Subsequent versions introduced multi-scale prediction (YOLOv3 \cite{redmon2018yolov3}), CSP bottlenecks and mosaic augmentation (YOLOv4 \cite{bochkovskiy2020yolov4}), and anchor-free detection heads (YOLOv8 \cite{ultralytics2023yolov8}). YOLOv8 uses a CSPDarknet backbone with C2f modules and achieves competitive mAP on COCO while maintaining real-time inference speeds. Its ease of fine-tuning on custom datasets via the Ultralytics framework makes it well-suited for domain-specific applications with limited training data.
+
+RT-DETR \cite{lv2023rtdetr}, a transformer-based real-time detector, represents an alternative architecture. While it achieves strong results, its higher memory requirements make YOLOv8 more practical for educational deployment on consumer hardware.
+
+\subsection{Computer Vision in Science Education}
+
+Computer vision has been applied to various educational tasks: handwritten equation recognition, circuit diagram grading, and chemical structure identification \cite{rajan2020decimer}. In physics, prior work includes automated reading of analog instruments \cite{zhang2020meter} and analysis of motion from video \cite{tracker2024}. Open-source tools like Tracker allow manual frame-by-frame position marking for kinematics analysis, but require significant user interaction.
+
+Our work differs from these approaches by combining automatic object detection with physics-aware post-processing in a single system that requires minimal user input beyond uploading an image or video.
+
+\subsection{Vision-Based Measurement}
+
+Converting pixel measurements to physical units requires calibration. Classical camera calibration methods use checkerboard patterns \cite{zhang2000calibration}. In our context, we use reference objects of known physical dimensions (e.g., a dynamometer of known length) already present in the experimental scene, eliminating the need for separate calibration procedures. This in-scene calibration approach is common in industrial metrology and has been adapted here for educational physics experiments.
+
+% ========== Methodology ==========
+\section{Methodology}
+
+\subsection{System Architecture}
+
+The system consists of five main modules arranged in a sequential pipeline (Figure~\ref{fig:architecture}):
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{Detection Module} (\texttt{detect.py}): Uses a fine-tuned YOLOv8 model to identify apparatus in the input image.
+  \item \textbf{Intent Classifier} (\texttt{intent\_classifier.py}): Determines the experiment type from the detected equipment using rule-based scoring, with GLM-4V API as a fallback when confidence is low.
+  \item \textbf{Physics Module} (\texttt{physics.py}): Performs calibration, motion tracking (for videos), and experiment-specific physical quantity computation.
+  \item \textbf{Visualization Module} (\texttt{animate.py}): Generates annotated images, motion overlays, and GIF animations.
+  \item \textbf{Web Interface} (\texttt{app.py}): A Streamlit application providing interactive access to all modules.
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/architecture.png}
+  \caption{System architecture. The pipeline flows from image input through detection, intent classification, physics computation, and visualization output.}
+  \label{fig:architecture}
+\end{figure}
+
+\subsection{Object Detection with YOLOv8}
+
+We use YOLOv8-Small (\texttt{yolov8s.pt}) as the base model, fine-tuned on our custom dataset. The model detects eight object classes:
+
+\begin{table}[H]
+  \centering
+  \caption{Object classes and their class IDs.}
+  \label{tab:classes}
+  \begin{tabular}{cl|cl}
+    \toprule
+    ID & Class Name & ID & Class Name \\
+    \midrule
+    0 & cart & 4 & ruler \\
+    1 & track & 5 & dynamometer \\
+    2 & spring & 6 & wooden\_block \\
+    3 & string & 7 & iron\_block \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Training configuration:
+\begin{itemize}[noitemsep]
+  \item Image size: $640 \times 640$ pixels
+  \item Batch size: 32
+  \item Epochs: 100
+  \item Optimizer: SGD with cosine annealing (Ultralytics default)
+  \item Hardware: NVIDIA RTX 5090 (32 GB)
+\end{itemize}
+
+During inference, a confidence threshold of 0.25 is applied. Certain classes (ruler, spring) are excluded from the final output due to high confusion rates observed during validation, though they remain in the training set for representation learning purposes.
+
+\subsection{Motion Tracking via Classical Computer Vision}
+
+For video inputs, the system extracts object trajectories without relying on the neural network. A colored marker (high-contrast sticker) is attached to the moving object. The tracking algorithm:
+
+\begin{enumerate}[noitemsep]
+  \item Converts each frame from BGR to HSV color space.
+  \item Applies predefined HSV thresholds to isolate the marker (supports red, green, and blue markers).
+  \item Computes the centroid of the largest connected component above a minimum area threshold.
+  \item Records the centroid position and timestamp for each frame.
+\end{enumerate}
+
+This approach is computationally lightweight, runs at video frame rate, and does not require GPU acceleration. The resulting position-time series serves as input to the physics computation module.
+
+\subsection{Intent Classification}
+
+The intent classifier determines which experiment type is being performed. It uses a two-level strategy:
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{Rule-based scoring}: Each experiment type (momentum, energy conservation, circular motion, vibration) has an associated set of expected apparatus. The classifier counts matching detections, applies proximity bonuses for spatially related objects, and assigns a score. If the top candidate's score exceeds the second by more than 0.3, the classification is accepted.
+  \item \textbf{LLM fallback}: When rule-based scoring is inconclusive, the image and detection list are sent to GLM-4V (ZhipuAI's multimodal model) for classification.
+\end{enumerate}
+
+The final result is always presented as a suggestion; the web interface allows users to override it manually.
+
+\subsection{Physics Computation}
+
+The physics module (\texttt{physics.py}) supports four experiment types:
+
+\subsubsection{Momentum Conservation}
+
+For two-cart collision experiments, given pre- and post-collision velocities ($v_1, v_2, v_1', v_2'$) and masses ($m_1, m_2$):
+\[
+p_{\text{before}} = m_1 v_1 + m_2 v_2, \quad p_{\text{after}} = m_1 v_1' + m_2 v_2'
+\]
+The system computes the relative error $|p_{\text{after}} - p_{\text{before}}| / |p_{\text{before}}|$ to assess conservation.
+
+\subsubsection{Mechanical Energy Conservation}
+
+For a falling or sliding object, the system computes kinetic and potential energy at multiple points along the trajectory:
+\[
+E_k = \frac{1}{2}mv^2, \quad E_p = mgh
+\]
+and evaluates whether $E_k + E_p$ remains approximately constant.
+
+\subsubsection{Circular Motion}
+
+For an object undergoing circular motion (e.g., a ball on a string), the system extracts the period $T$ from the position-time data using peak detection (\texttt{scipy.signal.find\_peaks}), then computes:
+\[
+\omega = \frac{2\pi}{T}, \quad v = \omega r, \quad a_c = \omega^2 r, \quad F_c = m \omega^2 r
+\]
+
+\subsubsection{Vibration}
+
+For spring-mass or pendulum oscillations, the system identifies peaks in the displacement-time curve to determine amplitude $A$, period $T$, and (if damped) the damping coefficient from successive amplitude ratios.
+
+\subsection{Visualization and Animation}
+
+The visualization module generates three types of output:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Annotated detection image}: Bounding boxes with class labels and confidence scores overlaid on the original photograph.
+  \item \textbf{Motion overlay}: The trajectory path and velocity arrows drawn on a representative frame.
+  \item \textbf{Animated GIF}: A Matplotlib-based animation showing the physical process (e.g., two carts colliding, energy bar charts changing, circular orbit traces).
+\end{itemize}
+
+\subsection{LLM-Generated Explanations}
+
+After physics computation, the system optionally calls GLM-4-Plus (text model) with the experiment type, user inputs, and computed results. The LLM generates:
+\begin{itemize}[noitemsep]
+  \item A natural-language explanation of the experiment and results.
+  \item A list of relevant formulas.
+  \item A knowledge-point checklist for study reference.
+\end{itemize}
+
+This feature is designed for educational contexts where students benefit from structured textual feedback alongside numerical results.
+
+\subsection{Web Interface}
+
+The Streamlit application provides a two-part workflow:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Part 1}: Upload an image (and optionally a video). The system runs YOLO detection and displays results in an editable table. Users can correct misclassifications or add missed objects using a drawing canvas.
+  \item \textbf{Part 2}: After confirming detections, the system suggests an experiment type. A dynamic form appears for entering measured physical data (masses, velocities, lengths, etc.). Upon submission, the system computes physics quantities, generates visualizations, and displays LLM-generated explanations.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/interface_part1.png}
+    \caption{Part 1 of the web interface showing detected apparatus with bounding boxes and an editable detection table.}
+  \label{fig:interface_part1}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/interface_part2.png}
+  \caption{Part 2 of the web interface displaying computed physical quantities, generated animation, and LLM-generated explanation.}
+  \label{fig:interface_part2}
+\end{figure}
+
+% ========== Dataset ==========
+\section{Dataset}
+
+\subsection{Data Sources}
+
+Training data came from three sources:
+\begin{enumerate}[noitemsep]
+  \item \textbf{Self-captured photographs}: Images of real experimental setups taken with a smartphone camera under various lighting conditions and angles.
+  \item \textbf{Video frames}: Frames extracted from physics experiment demonstration videos (obtained with permission from video platforms). An automated frame extraction script (\texttt{extract\_video\_frames.py}) sampled key frames at configurable intervals.
+  \item \textbf{Publicly available images}: A smaller set of supplementary images from open datasets.
+\end{enumerate}
+
+\subsection{Annotation}
+
+Images were annotated in YOLO format (one \texttt{.txt} file per image, each line containing \texttt{class\_id x\_center y\_center width height} with normalized coordinates). Initial annotations were generated automatically using a pre-labeling script (\texttt{autolabel\_glm.py}) that leveraged a vision-language model for proposal generation, followed by manual verification and correction.
+
+\subsection{Dataset Split}
+
+The \texttt{prepare\_dataset.py} script merges all sources and splits the data:
+\begin{itemize}[noitemsep]
+  \item Training set: 80\% of total images
+  \item Validation set: 15\%
+  \item Test set: 5\%
+\end{itemize}
+
+File names are prefixed with their source tag (e.g., \texttt{self\_captured\_exp1.jpg}) to prevent collisions between identically named files from different sources.
+
+% ========== Experiments and Results ==========
+\section{Experiments and Results}
+
+\subsection{Training Results}
+
+The YOLOv8-Small model was trained for 100 epochs on the custom dataset. Training was performed on an NVIDIA RTX 5090 GPU with CUDA 12.8. The model converged within approximately 60 epochs, with the best checkpoint selected by validation mAP@0.5.
+
+Key observations during training:
+\begin{itemize}[noitemsep]
+  \item The ``track'' class initially suffered from confusion with ``ruler'' (57\% of track instances were misclassified as ruler in early epochs), motivating the decision to exclude ruler from inference output.
+  \item After three rounds of iterative training with expanded data and corrected annotations, confusion rates decreased substantially.
+\end{itemize}
+
+\subsection{Detection Accuracy}
+
+We evaluated the trained model on five held-out test images containing various combinations of the target object classes. All objects in all five images were correctly detected and classified, yielding a 100\% detection accuracy on this test set.
+
+\begin{table}[H]
+  \centering
+  \caption{Detection results on the 5-image test set.}
+  \label{tab:results}
+  \begin{tabular}{ccccc}
+    \toprule
+    Test Image & Objects Present & Detected & Correct & Accuracy \\
+    \midrule
+    1 & 4 & 4 & 4 & 100\% \\
+    2 & 3 & 3 & 3 & 100\% \\
+    3 & 5 & 5 & 5 & 100\% \\
+    4 & 3 & 3 & 3 & 100\% \\
+    5 & 4 & 4 & 4 & 100\% \\
+    \midrule
+    \textbf{Total} & \textbf{19} & \textbf{19} & \textbf{19} & \textbf{100\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.45\textwidth]{figures/detect_example1.png}
+  \includegraphics[width=0.45\textwidth]{figures/detect_example2.png}
+  \caption{Example detection results showing bounding boxes with class labels and confidence scores on two test images.}
+  \label{fig:detection_examples}
+\end{figure}
+
+\subsection{Physics Computation Examples}
+
+To demonstrate the physics module, we present a sample output from a momentum conservation experiment:
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\textwidth]{figures/physics_output.png}
+  \caption{Physics module output for a momentum conservation experiment, showing computed momenta and conservation assessment.}
+  \label{fig:physics_output}
+\end{figure}
+
+\subsection{Visualization Output}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\textwidth]{figures/animation_frame.png}
+  \caption{A frame from the generated animation illustrating the collision process with velocity arrows and momentum labels.}
+  \label{fig:animation}
+\end{figure}
+
+% ========== Discussion ==========
+\section{Discussion}
+
+\subsection{Strengths}
+
+The system demonstrates several practical strengths:
+\begin{itemize}[noitemsep]
+  \item The modular pipeline separates detection, classification, computation, and visualization, making each component independently testable and replaceable.
+  \item The combination of neural network detection (for static scenes) and classical CV tracking (for motion) leverages the strengths of each approach appropriately.
+  \item The LLM fallback for intent classification handles ambiguous cases without requiring exhaustive rule engineering.
+  \item The interactive web interface closes the loop between automated analysis and human verification.
+\end{itemize}
+
+\subsection{Limitations}
+
+Several limitations should be acknowledged:
+\begin{itemize}[noitemsep]
+  \item \textbf{Dataset size}: The training set remains small (on the order of 170 images). While the model performs well on the test set, generalization to significantly different camera angles, lighting conditions, or apparatus brands has not been extensively validated.
+  \item \textbf{Calibration dependency}: The pixel-to-centimeter conversion relies on detecting a reference object of known dimensions. If no such object is visible, the system cannot perform absolute measurements and falls back to user-provided calibration data.
+  \item \textbf{Limited test set}: The 100\% accuracy reported is on only 5 images. A larger, independently collected test set would provide more robust performance estimates.
+  \item \textbf{Physics module scope}: The current physics computation assumes idealized conditions (frictionless tracks, perfectly elastic/inelastic collisions). Real experiments involve friction, air resistance, and measurement noise that the system does not model.
+  \item \textbf{Class confusion}: The track/ruler confusion observed during training indicates that visually similar objects remain challenging for the model at its current training data scale.
+\end{itemize}
+
+\subsection{Future Work}
+
+Several directions for improvement are possible:
+\begin{itemize}[noitemsep]
+  \item Expanding the dataset through additional data collection and synthetic data augmentation.
+  \item Incorporating uncertainty estimation to flag low-confidence detections for human review.
+  \item Adding support for more experiment types (optics, thermodynamics, electromagnetism).
+  \item Replacing the manual marker-based tracking with learned object tracking methods (e.g., ByteTrack or similar multi-object trackers).
+  \item Deploying the system as a mobile application for real-time in-lab use.
+\end{itemize}
+
+% ========== Conclusion ==========
+\section{Conclusion}
+
+This paper presented Physics Pictorial Recognition, an end-to-end system for automated physics experiment analysis. The system combines YOLOv8 object detection with classical computer vision tracking, rule-based intent classification, physics computation modules, and LLM-generated explanations, all accessible through an interactive web interface.
+
+The key finding is that a relatively small, carefully annotated dataset is sufficient to train a detector that accurately identifies common physics laboratory apparatus. When combined with domain-specific post-processing, the detection results can be transformed into meaningful physical analysis covering momentum conservation, energy conservation, circular motion, and vibration experiments.
+
+While the current system has limitations in dataset scale and physics model complexity, it establishes a viable framework for AI-assisted physics experiment analysis. The modular architecture allows each component to be improved independently as more data becomes available and as detection and tracking methods continue to advance.
+
+% ========== References ==========
+\newpage
+\begin{thebibliography}{99}
+  \bibitem{dalal2005hog} Dalal, N., \& Triggs, B. (2005). Histograms of oriented gradients for human detection. \textit{Proceedings of IEEE CVPR}, 886--893.
+  \bibitem{ren2015fasterrcnn} Ren, S., He, K., Girshick, R., \& Sun, J. (2015). Faster R-CNN: Towards real-time object detection with region proposal networks. \textit{Advances in Neural Information Processing Systems}, 28.
+  \bibitem{redmon2016yolo} Redmon, J., Divvala, S., Girshick, R., \& Farhadi, A. (2016). You only look once: Unified, real-time object detection. \textit{Proceedings of IEEE CVPR}, 779--788.
+  \bibitem{redmon2018yolov3} Redmon, J., \& Farhadi, A. (2018). YOLOv3: An incremental improvement. \textit{arXiv preprint arXiv:1804.02767}.
+  \bibitem{bochkovskiy2020yolov4} Bochkovskiy, A., Wang, C.-Y., \& Liao, H.-Y. M. (2020). YOLOv4: Optimal speed and accuracy of object detection. \textit{arXiv preprint arXiv:2004.10934}.
+  \bibitem{ultralytics2023yolov8} Jocher, G., Chaurasia, A., \& Qiu, J. (2023). Ultralytics YOLOv8. \url{https://github.com/ultralytics/ultralytics}.
+  \bibitem{lv2023rtdetr} Lv, W., et al. (2023). DETRs beat YOLOs on real-time object detection. \textit{arXiv preprint arXiv:2304.08069}.
+  \bibitem{rajan2020decimer} Rajan, K., Zielesny, A., \& Steinbeck, C. (2020). DECIMER: Towards deep learning for chemical image recognition. \textit{Journal of Cheminformatics}, 12(1), 65.
+  \bibitem{zhang2020meter} Zhang, Y., et al. (2020). Deep learning-based automatic reading of analog meters. \textit{IEEE Access}, 8, 218050--218060.
+  \bibitem{tracker2024} Brown, D. (2024). Tracker: Video analysis and modeling tool for physics education. \url{https://physlets.org/tracker/}.
+  \bibitem{zhang2000calibration} Zhang, Z. (2000). A flexible new technique for camera calibration. \textit{IEEE Transactions on Pattern Analysis and Machine Intelligence}, 22(11), 1330--1334.
+\end{thebibliography}
+
+% ========== Appendix ==========
+\newpage
+\appendix
+\section{Code Structure}
+
+\begin{verbatim}
+Physics_Pictorial_Recognition/
+├── app.py                 # Streamlit web interface
+├── detect.py              # YOLO detection module
+├── physics.py             # Physics computation module
+├── animate.py             # Visualization and animation
+├── intent_classifier.py   # Experiment type classification
+├── explain_api.py         # GLM API wrapper for explanations
+├── train.py               # Model training script
+├── prepare_dataset.py     # Dataset preparation
+├── autolabel_glm.py       # Auto-labeling with vision LLM
+├── extract_video_frames.py# Video frame extraction
+└── data/
+    ├── self_captured/     # Self-captured images + labels
+    ├── video_frames/      # Extracted video frames + labels
+    ├── openclaw/          # Public dataset images + labels
+    └── dataset/           # Merged train/val/test splits
+\end{verbatim}
+
+\end{document}
