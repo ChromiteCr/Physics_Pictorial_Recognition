@@ -1,0 +1,83 @@
+{
+  "id": "momentum",
+  "name_zh": "验证动量守恒定律",
+  "name_en": "Conservation of momentum: two-cart collision",
+  "grade": "高中",
+  "goal": "测出两辆小车碰撞前、后的速度，比较碰撞前后两车的总动量，验证一维碰撞中系统的动量守恒。",
+  "principle": "两车在水平导轨上碰撞，碰撞时间极短，两车之间的相互作用力远大于摩擦力等外力，系统所受合外力可以忽略，所以碰撞前后总动量不变：m_A·v₁ = m_A·v_A' + m_B·v_B'。粘合碰撞时两车碰后速度相同，m_A·v₁ = (m_A + m_B)·v₂。小车上的遮光片宽度为 w，经过光电门的挡光时间为 Δt，挡光时间很短，可用平均速度 v = w/Δt 代替瞬时速度。以碰前动量 p 为横轴、碰后动量 p' 为纵轴作图，理想情况是一条斜率为 1、过原点的直线。导轨不水平或有摩擦时，两门之间小车还受到外力，动量会变；车越慢、走的路越长，外力的冲量越大。",
+  "formula": "p = m_A·w/Δt₁；p' = (m_A + m_B)·w/Δt₂（粘合）或 p' = m_A·w/Δt_A' + m_B·w/Δt_B'（弹性）；验证 p' = p",
+  "variables": [
+    {"symbol": "m_A", "name": "A 车质量（含遮光片、撞针）", "unit": "g", "role": "measured"},
+    {"symbol": "m_B", "name": "B 车质量（含遮光片、橡皮泥）", "unit": "g", "role": "measured"},
+    {"symbol": "w", "name": "遮光片宽度", "unit": "cm", "role": "measured"},
+    {"symbol": "Δt₁", "name": "碰前 A 经过光电门 1 的挡光时间", "unit": "ms", "role": "control"},
+    {"symbol": "Δt₂", "name": "碰后两车经过光电门 2 的挡光时间", "unit": "ms", "role": "measured"},
+    {"symbol": "v₁", "name": "碰前 A 的速度", "unit": "m/s", "role": "derived"},
+    {"symbol": "v₂", "name": "碰后两车的共同速度", "unit": "m/s", "role": "derived"},
+    {"symbol": "p", "name": "碰前总动量", "unit": "kg·m/s", "role": "derived"},
+    {"symbol": "p'", "name": "碰后总动量", "unit": "kg·m/s", "role": "derived"}
+  ],
+  "apparatus": [
+    "气垫导轨及气源（或低摩擦力学轨道）",
+    "滑块（小车）两个，各装一块遮光片",
+    "撞针和橡皮泥（粘合碰撞），或弹性碰撞架（弹性碰撞）",
+    "光电门两个及数字计时器（分辨率 0.1 ms）",
+    "天平（分度值 0.1 g）",
+    "游标卡尺（测遮光片宽度）",
+    "配重片若干",
+    "米尺（量两光电门间距）"
+  ],
+  "steps": [
+    "用天平称出两辆车的质量（遮光片、撞针、橡皮泥、配重都要装好后再称），用游标卡尺测出遮光片宽度 w。",
+    "安装导轨，接通气源；调节导轨底脚螺丝，使单独推出的小车经过两个光电门时挡光时间相等，说明导轨水平。",
+    "把两个光电门装在碰撞点两侧，离碰撞点都不要太远；B 车静止放在两光电门之间。",
+    "轻推 A 车，让它经过光电门 1 后与 B 相碰并粘在一起，一起经过光电门 2，记下 Δt₁ 和 Δt₂。",
+    "改变推力大小，重复 5 次，每次 B 都从静止开始。",
+    "计算每次的 v₁ = w/Δt₁、v₂ = w/Δt₂ 和碰撞前后的总动量 p、p'。",
+    "以 p 为横轴、p' 为纵轴描点作图，看直线的斜率是否为 1、是否过原点。"
+  ],
+  "data_table": {
+    "columns": ["序号", "Δt₁/ms", "Δt₂/ms", "v₁/(m·s⁻¹)", "v₂/(m·s⁻¹)", "p/(kg·m·s⁻¹)", "p'/(kg·m·s⁻¹)"]
+  },
+  "safety": [
+    "不要用力过猛推车，以免小车冲出导轨端部摔坏或砸伤手脚。",
+    "气垫导轨通气后再放滑块、关气前先取下滑块，防止划伤导轨表面。",
+    "光电门和计时器的电源线不要拉在过道上。"
+  ],
+  "common_causes": [
+    "momentum.random_only",
+    "momentum.track_tilt",
+    "momentum.friction",
+    "momentum.mass_entry",
+    "momentum.flag_width",
+    "momentum.timing_offset"
+  ],
+  "knowledge_points": [
+    "kp.momentum",
+    "kp.momentum_conservation",
+    "kp.collision_types",
+    "kp.impulse_theorem",
+    "kp.newton_third_law",
+    "kp.photogate",
+    "kp.instantaneous_velocity",
+    "kp.mass",
+    "kp.kinetic_friction",
+    "kp.incline_forces",
+    "kp.uniform_acceleration",
+    "kp.kinetic_energy",
+    "kp.graph_slope_intercept",
+    "kp.systematic_error",
+    "kp.random_error"
+  ],
+  "cause_kps": {
+    "momentum.random_only": ["kp.random_error", "kp.multiple_measurements"],
+    "momentum.track_tilt": ["kp.incline_forces", "kp.impulse_theorem", "kp.momentum_conservation"],
+    "momentum.friction": ["kp.kinetic_friction", "kp.impulse_theorem", "kp.momentum_conservation"],
+    "momentum.mass_entry": ["kp.mass", "kp.momentum", "kp.graph_slope_intercept"],
+    "momentum.flag_width": ["kp.photogate", "kp.instantaneous_velocity", "kp.relative_error"],
+    "momentum.timing_offset": ["kp.photogate", "kp.systematic_error"]
+  },
+  "relation_family": "proportional",
+  "labsim_id": "momentum",
+  "yolo_cues": ["cart", "track"]
+}
