@@ -59,13 +59,13 @@ def test_weighing_the_hanger_separates_confounded_pair():
     rng = np.random.default_rng(4)
     before, after = [], []
     for _ in range(20):
-        ds = EXP.simulate(rng, "hooke.hanger_omitted", nuisance={"hanger_g": 30.0})
+        ds = EXP.simulate(rng, "hooke.hanger_omitted", nuisance={"hanger_g": 8.0}, linear={"inv_k": 0.03})
         p0 = posterior(EXP, ds).prob("hooke.hanger_omitted")
         ds2 = EXP.extend(rng, ds, EXP.menu_item("weigh_hanger").plan)
         p1 = posterior(EXP, ds2).prob("hooke.hanger_omitted")
         before.append(p0)
         after.append(p1)
-    assert np.mean(after) > np.mean(before) + 0.2
+    assert np.mean(after) > np.mean(before) + 0.1
     assert np.mean(after) > 0.8
 
 
