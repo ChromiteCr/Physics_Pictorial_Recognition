@@ -52,10 +52,56 @@ def test_heavy_hanging_follows_exact_connected_body_law():
 
 def test_unbalanced_gives_predicted_force_intercept():
     ds = EXP.simulate(np.random.default_rng(2), "newton2.unbalanced", linear={"f_unbal": -0.06}, noise_scale=1e-6)
+    # 故障原因带精确连接体定律：a = (mg + F_res)/(M + m)，拉力要先超过 0.06 N 才有加速度
+    for o in ds.observations:
+        m = o.setting / 1000.0
+        assert o.values[0] == pytest.approx((m * G - 0.06) / (0.5 + m), abs=0.006)
     panel = compute_panel(EXP.linearise(ds))
-    # a = (F + F_res)/M → F 轴截距 = −F_res = 0.06 N，a 轴截距 = F_res/M = −0.12 m/s²
-    assert panel.intercept == pytest.approx(-0.12, abs=0.01)
-    assert -panel.intercept / panel.slope == pytest.approx(0.06, abs=0.005)
+    assert "intercept_neg" in panel.signatures
+    assert -panel.intercept / panel.slope == pytest.approx(0.06, abs=0.01)
+
+
+def test_other_faults_include_connected_body_law():
+    """细线斜拉：M a = T cosφ、m a cosφ = mg − T；滑轮阻力：a = (mg − f)/(M + m + J)。"""
+    phi = np.radians(20.0)
+    ds = EXP.simulate(np.random.default_rng(12), "newton2.string_angle", magnitude=20.0, noise_scale=1e-6)
+    for o in ds.observations:
+        m = o.setting / 1000.0
+        assert o.values[0] == pytest.approx(m * G * np.cos(phi) / (0.5 + m * np.cos(phi) ** 2), abs=0.006)
+    ds = EXP.simulate(np.random.default_rng(13), "newton2.pulley_drag", magnitude=20.0,
+                      linear={"f_pulley": 0.02}, noise_scale=1e-6)
+    for o in ds.observations:
+        m = o.setting / 1000.0
+        assert o.values[0] == pytest.approx((m * G - 0.02) / (0.5 + m + 0.02), abs=0.006)
+
+
+def _exact_world(rng, f):
+    """真实装置：精确连接体定律总在，再叠加未被抵消的阻力 f（打点计时器噪声，记录到 0.01）。"""
+    from lab_detective.labsim.core import Dataset, Observation
+    obs = []
+    for m_g in (10.0, 20.0, 30.0, 40.0, 50.0):
+        m = m_g / 1000.0
+        a = (m * G + f) / (0.5 + m) + rng.normal(0.0, 0.015)
+        obs.append(Observation("main", m_g, (round(a / 0.01) * 0.01,)))
+    return Dataset("newton2", obs)
+
+
+def test_real_single_fault_is_not_flagged_as_missing_cause():
+    """回归：故障模型不带 M + m 时，真实的"没平衡摩擦力"数据约 90% 被判成"原因不在清单里"（p < 0.01）。"""
+    rng = np.random.default_rng(14)
+    top_ok = flagged = 0
+    for _ in range(30):
+        post = posterior(EXP, _exact_world(rng, -0.05))
+        top_ok += post.top() == "newton2.unbalanced"
+        flagged += post.misfit_p < 0.01
+    assert top_ok >= 25
+    assert flagged <= 3
+
+
+def test_heavy_hanging_fix_does_not_repeat_the_protocol():
+    """标准方案本来就是 m ≤ M/10，修正建议不能再让学生"使 m 不超过 M 的十分之一"。"""
+    fix = EXP.cause("newton2.heavy_hanging").fix_zh
+    assert "十分之一" not in fix and "M + m" in fix
 
 
 @pytest.mark.parametrize("cause", list(LARGE))

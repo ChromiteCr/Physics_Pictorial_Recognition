@@ -8,10 +8,13 @@
 面板坐标：横轴 = 记录的拉力 F = m·g（N，视为准确），纵轴 = 记录的加速度 a（m/s²）。
 理想直线 a = F/M，截距 0，斜率 1/M 已知（M 由构造参数给出，相当于学生称出并填写的值）。
 
-建模约定（单故障世界，与胡克定律样板一致）：
+建模约定：
 - "只有随机误差" = 课本理想模型 a = F/M 成立（细线拉力 = mg、无未补偿阻力、滑轮和车轮转动惯量可忽略）。
-- 每个原因 = 理想模型 + 一个被忽略的物理效应或一个操作错误。
-- 精确的连接体动力学 a = mg/(M + m) 单独作为"槽码质量没有远小于小车质量"这一原因。
+- 精确的连接体动力学 a = mg/(M + m) 单独作为"槽码质量没有远小于小车质量"这一原因（只有这一个效应）。
+- 其余每个原因 = 精确连接体动力学 + 一个被忽略的物理效应或一个操作错误。连接体效应在真实装置里总是存在
+  （M = 500 g、m ≤ 50 g 时斜率仍偏小约 10%，打点计时器下 z ≈ −4.5），故障模型不带它的话，
+  真实的"没平衡摩擦力"数据会被失配检验判成"原因不在清单里"。
+- 因此每个故障原因的标准数据都带"斜率偏小"；声明的特征只列原因自身效应造成的（滑轮阻力的 J 也压低斜率，所以列上）。
 
 仪器：
 - 打点计时器（默认）：T = 0.1 s 的计数点，6 段逐差 a = [(x4+x5+x6) − (x1+x2+x3)]/(9T²)；
@@ -88,8 +91,8 @@ class Newton2(Experiment):
             "none", ("none",),
             fix_zh="多测几组、取平均即可。", fix_en="Take more runs and average.",
         ),
-        # 推导：沿板方向 M a = T + (Mg sinθ − f)。未平衡时 F_res = Mg sinθ − f < 0，T ≈ mg
-        # → a = (mg + F_res)/M：拉力要先超过 |F_res| 才有加速度，F 轴上截距为 −F_res > 0。
+        # 推导：沿板方向 M a = T + (Mg sinθ − f)，槽码 m a = mg − T。未平衡时 F_res = Mg sinθ − f < 0
+        # → a = (mg + F_res)/(M + m)：拉力要先超过 |F_res| 才有加速度，图线整体下移。
         Cause(
             "newton2.unbalanced", "没有平衡摩擦力或平衡不足", "friction not (fully) compensated",
             "木板没有垫高或垫得太低，小车受到的摩擦力和纸带阻力没有被重力沿斜面的分力抵消，"
@@ -102,7 +105,7 @@ class Newton2(Experiment):
             fix_en="Without the hanging mass, raise the far end of the board until the cart (pulling its "
             "tape) moves at constant speed after a nudge.",
         ),
-        # 推导：垫得太高时 F_res = Mg sinθ − f > 0 → a = (mg + F_res)/M，不挂槽码小车也会加速。
+        # 推导：垫得太高时 F_res = Mg sinθ − f > 0 → a = (mg + F_res)/(M + m)，不挂槽码小车也会加速。
         Cause(
             "newton2.overbalanced", "平衡摩擦力过度", "friction over-compensated",
             "木板垫得太高，重力沿斜面的分力超过了阻力，即使不挂槽码，小车也会沿木板加速下滑。",
@@ -122,12 +125,17 @@ class Newton2(Experiment):
             "The hanging mass accelerates together with the cart, so part of its weight goes into "
             "accelerating itself; the string tension is less than its weight, more so for heavier loads.",
             "bend", ("slope_low", "curve_down"),
-            fix_zh="在小车上加砝码增大 M，或减小槽码质量，使 m 不超过 M 的十分之一；也可改用力传感器直接测细线拉力。",
-            fix_en="Add mass to the cart or use lighter hanging masses (m ≤ M/10), or measure the tension "
-            "directly with a force sensor.",
+            fix_zh="用槽码重力代替拉力的相对误差约为 m/(M + m)，m = M/10 时仍有约 9%。改进：在小车上加砝码增大 M；"
+            "或改用力传感器直接测细线拉力；或先把槽码都放在小车上，每次从车上取槽码挂到小盘里，保持 M + m 不变，"
+            "以小车和槽码整体为研究对象，a = mg/(M + m) 与 mg 严格成正比。",
+            fix_en="Using the hanging weight as the pull gives a relative error of about m/(M + m), still ~9% at "
+            "m = M/10. Add mass to the cart, measure the tension with a force sensor, or start with all slotted "
+            "masses on the cart and move them to the hanger so that M + m stays constant; then a = mg/(M + m) is "
+            "exactly proportional to mg.",
         ),
         # 推导：细线与板成 φ 角，沿板拉力 T cosφ；垂直分量 T sinφ 使正压力减小，阻力少 μT sinφ
-        # （μ ≈ 0.01 的滚动阻力，二阶小量，略去）。T ≈ mg → a = mg·cosφ/M：斜率乘 cosφ。
+        # （μ ≈ 0.01 的滚动阻力，二阶小量，略去）。φ 视为不变时细线收短的速率 = v cosφ，槽码加速度 a cosφ：
+        # M a = T cosφ，m a cosφ = mg − T → a = mg·cosφ/(M + m cos²φ)：斜率约乘 cosφ。
         Cause(
             "newton2.string_angle", "细线与木板不平行", "string not parallel to the board",
             "定滑轮的高度没有调好，细线斜着拉小车，只有沿木板方向的分力使小车加速。",
@@ -140,15 +148,15 @@ class Newton2(Experiment):
             fix_en="Adjust the pulley height so that the string is parallel to the board.",
         ),
         # 推导：滑轮两侧拉力差带动滑轮转动并克服轴摩擦：(T1 − T2) = (I/r²)·a + f_p；
-        # 车轮转动同理并入等效质量 J = Σ I_i/r_i²。mg − T1 ≈ 0（理想近似 T1 ≈ mg），T2 = M a
-        # → a = (mg − f_p)/(M + J)：斜率按 M/(M + J) 变小，且拉力要先克服 f_p。
+        # 车轮转动同理并入等效质量 J = Σ I_i/r_i²。mg − T1 = m a，T2 = M a
+        # → a = (mg − f_p)/(M + m + J)：斜率再按 (M + m)/(M + m + J) 变小，且拉力要先克服 f_p。
         Cause(
             "newton2.pulley_drag", "滑轮转动惯量和轴摩擦", "pulley inertia and axle friction",
             "定滑轮较重或轴不灵活：细线要带动滑轮（以及小车车轮）转起来，还要克服滑轮轴的摩擦；"
             "平衡摩擦力时细线没有挂在滑轮上，这部分阻力没有被补偿。",
             "The pulley is heavy or its axle is stiff: the string must spin up the pulley (and the cart's "
             "wheels) and overcome axle friction, which the friction-compensation step never included.",
-            "x_offset", ("intercept_neg",),
+            "x_offset", ("slope_low", "intercept_neg"),
             magnitude=Prior.uniform(5.0, 25.0, 16),
             magnitude_label_zh="滑轮和车轮的等效质量 I/r²", magnitude_unit="g",
             linear=(LinearParam("f_pulley", 0.02, 0.006, "滑轮轴摩擦力", "N"),),
@@ -199,17 +207,19 @@ class Newton2(Experiment):
         if kind == "main":
             m = settings[None, :] / 1000.0  # kg
             F = m * G  # (1, n)
+            # 故障原因都带精确连接体动力学（分母 M + m），见文件头
             if cause_id in ("newton2.unbalanced", "newton2.overbalanced"):
-                c[:] = F / M
-                U[:, :, 0, 0] = 1.0 / M
+                c[:] = F / (M + m)
+                U[:, :, 0, 0] = np.broadcast_to(1.0 / (M + m), (P, n))
             elif cause_id == "newton2.heavy_hanging":
                 c[:] = F / (M + m)
             elif cause_id == "newton2.string_angle":
-                c[:] = np.cos(np.radians(params["mag"])) * F / M
+                cos = np.cos(np.radians(params["mag"]))  # (P, 1)
+                c[:] = cos * F / (M + m * cos**2)
             elif cause_id == "newton2.pulley_drag":
-                Mj = M + params["mag"] / 1000.0  # (P, 1)
+                Mj = M + m + params["mag"] / 1000.0  # (P, n)
                 c[:] = F / Mj
-                U[:, :, 0, 0] = np.broadcast_to(-1.0 / Mj, (P, n))
+                U[:, :, 0, 0] = -1.0 / Mj
             else:
                 c[:] = F / M
             return c[:, :, None], U

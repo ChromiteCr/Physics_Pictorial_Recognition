@@ -246,7 +246,10 @@ class Atwood(Experiment):
         y = 2 * self.drop_m / t**2
         r = self.obs_kinds["main"].readings[0]
         sd_t = float(np.sqrt(r.sigma**2 + r.resolution**2 / 12))
-        sy = 2 * y * sd_t / t  # σ_a = |da/dt|·σ_t = (4h/t³)σ_t
+        # σ_a = |da/dt|·σ_t = (4h/t³)σ_t。t 用同一 Δm 各次计时的平均值：用每次自己的 t 定权重，
+        # 测得偏慢（a 偏小）的点权重偏大，斜率系统偏低约 3%（干净数据上 z 偏 −0.75）
+        t_bar = np.array([t[dm == d].mean() for d in dm])
+        sy = 4 * self.drop_m * sd_t / t_bar**3
         Mt = self.total_mass_g / 1000.0
         return LinearData(x, y, sy, np.array(idx), "质量差产生的力 Δm·g (N)", "加速度 a = 2h/t² (m/s²)",
                           1.0 / Mt, 0.0)

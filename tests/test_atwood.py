@@ -65,6 +65,19 @@ def test_string_mass_closed_form_matches_ode():
     assert a_meas == pytest.approx((dm * G - 2 / 3 * lam * G * H) / meff, rel=0.03)
 
 
+def test_panel_is_unbiased_on_clean_data():
+    """回归：σ_a 用每次自己测得的 t 定权重时，测得偏慢的点权重偏大，干净数据的斜率比平均偏低约 3%（z ≈ −0.75）。"""
+    rng = np.random.default_rng(10)
+    z_s, z_b, ratio = [], [], []
+    for _ in range(200):
+        p = compute_panel(EXP.linearise(EXP.simulate(rng, "atwood.random_only")))
+        z_s.append(p.slope_ratio_z)
+        z_b.append(p.intercept_z)
+        ratio.append(p.slope_ratio)
+    assert abs(np.mean(z_s)) < 0.4 and abs(np.mean(z_b)) < 0.4
+    assert np.mean(ratio) == pytest.approx(1.0, abs=0.015)
+
+
 def test_timing_offset_enters_raw_time_linearly():
     ds = EXP.simulate(np.random.default_rng(2), "atwood.timing_offset", linear={"dt": 0.2}, noise_scale=1e-6)
     ideal = np.sqrt(2 * H / (np.array([o.setting for o in ds.observations]) / 1000 * G / MT))
