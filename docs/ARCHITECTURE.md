@@ -125,6 +125,7 @@ bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.free
 ## 3. 统一约定
 - 纯 numpy/scipy，不引入新依赖（需要时在 pyproject 里集中加，由主会话处理）。
 - 随机性只用 `np.random.Generator`，所有生成函数接受 `seed`。
+  开发识别模块时已经看过或跑过的照片（`recognition_bench.DEV_SEEN_STEMS`）所在的时段固定划进训练侧，不进测试集，记在 `split.json.dev_seen_forced_train`；可选时段不够 k 个时测试集相应缩小并警告，一个都不剩时拒绝切分。
 - 每个模块配 `tests/test_<模块>.py`，单个测试 < 10 秒；整套测试 < 2 分钟。
 - 本机内存上限：我们启动的所有进程合计 ≤ 24 GB；测试和生成任务控制在 < 2 GB。
 - 不调用任何外部 API（蒸馏脚本除外，且只由用户提供 key 后手动运行）。

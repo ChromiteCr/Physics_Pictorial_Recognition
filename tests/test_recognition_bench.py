@@ -752,3 +752,45 @@ def test_dev_seen_photos_never_in_test():
     for pid, v in sp["photos"].items():
         if rb._dev_seen(pid):
             assert v["split"] == "train", pid
+
+
+def _with_dev_seen(rows, picks):
+    """把第 idx 行的 id 换成开发时看过的照片（IMG_9307 等），让它所在的时段被固定划进训练侧。"""
+    out = [dict(r) for r in rows]
+    for idx, stem in picks.items():
+        out[idx]["id"] = f"sc-{stem}"
+    return out
+
+
+def test_dev_seen_sessions_are_recorded_and_shrink_the_test_set_with_a_warning():
+    base = _sessioned_rows(8, 2)  # 第 i 行属于时段 i // 2
+    # 时段 0–4 被占用，还剩 3 个可选，目标 k=2 仍能满足
+    rows = _with_dev_seen(base, {0: "IMG_9307", 2: "IMG_9314", 4: "IMG_9316", 6: "IMG_9341", 8: "IMG_9359"})
+    info = rb.session_split(rows, gap_s=1800)
+    forced = info["dev_seen_forced_train"]
+    assert forced["sessions"] == [1, 2, 3, 4, 5] and "sc-IMG_9307" in forced["photos"]
+    assert info["n_test_sessions"] == 2
+    assert any("开发时看过" in w for w in info["warnings"])
+    assert all(info["photos"][pid]["split"] == "train" for pid in forced["photos"])
+    # 再占用时段 5、6：只剩 1 个可选时段、目标 2 个，测试集缩到 1 个并警告
+    rows2 = _with_dev_seen(rows, {10: "IMG_9361", 12: "IMG_9363"})
+    info2 = rb.session_split(rows2, gap_s=1800)
+    assert info2["n_test_sessions"] == 1 and any("少于目标" in w for w in info2["warnings"])
+    assert info2["n_test_photos"] == 2
+    # 全部时段都被占用：拒绝，不悄悄给空测试集
+    rows3 = _with_dev_seen(rows2, {14: "IMG_9449"})
+    with pytest.raises(rb.DegenerateSplit, match="开发时看过"):
+        rb.session_split(rows3, gap_s=1800)
+
+
+def test_rebuild_after_resplit_removes_stale_images_and_detections(tmp_path):
+    rows, split, out, _, _ = _built(tmp_path)
+    old_ids = set(rb.split_ids(split, "test"))
+    other = rb.session_split(rows, gap_s=1800, seed=3)
+    new_ids = set(rb.split_ids(other, "test"))
+    assert new_ids != old_ids
+    rb.build_test_set(rows, other, out, image_root=tmp_path / "photos", detector=lambda p: DETS)
+    assert {p.stem for p in (out / "images").iterdir()} == new_ids
+    assert {d["id"] for d in rb.read_jsonl_dicts(out / "detections.jsonl")} == new_ids
+    assert {e.meta["photo_id"] for e in read_jsonl(out / "test.jsonl")} == new_ids
+

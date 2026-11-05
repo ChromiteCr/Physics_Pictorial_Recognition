@@ -290,7 +290,12 @@ def session_split(
     k = min(max(1, int(math.floor(test_frac * n + 0.5))), n - 1)
     blocked = {i for i, members in enumerate(sessions) if any(_dev_seen(m) for m in members)}
     ranked = [i for i in sorted(range(n), key=lambda s: _hash_key(seed, sessions[s][0])) if i not in blocked]
-    test_idx = set(ranked[:k])
+    if not ranked:
+        raise DegenerateSplit(
+            f"间隔 {gap:g} s 下全部 {n} 个时段都含开发时看过的照片，没有能进测试集的时段；"
+            "请换更小的间隔（--gap-s N）。")
+    k_used = min(k, len(ranked))
+    test_idx = set(ranked[:k_used])
 
     photos: dict[str, dict] = {}
     for s, members in enumerate(sessions):
@@ -303,8 +308,12 @@ def session_split(
     if undated:
         warnings.append(f"{len(undated)} 张照片没有拍摄时间，按文件编号相邻归段，独立性无法按时间核对")
     frac_photos = n_test / len(photos) if photos else 0.0
+    if blocked:
+        warnings.append(f"{len(blocked)} 个时段含开发时看过的照片，已固定划进训练侧（不进测试集）")
+    if k_used < k:
+        warnings.append(f"可进测试集的时段只有 {len(ranked)} 个，少于目标 {k} 个，测试集只取 {k_used} 个时段")
     if not 0.1 <= frac_photos <= 0.5:
-        warnings.append(f"测试集占照片 {frac_photos:.0%}（时段占 {k}/{n}），偏离 25% 较多；"
+        warnings.append(f"测试集占照片 {frac_photos:.0%}（时段占 {k_used}/{n}），偏离 25% 较多；"
                         "时段大小悬殊时可换 --seed，但换之前不要看任何标签或结果")
 
     gaps_to_train = _nearest_train_gaps(photos, taken)
@@ -315,9 +324,11 @@ def session_split(
                    "min_sessions": min_sessions, "auto_min_sessions": auto_min_sessions},
         "n_photos": len(photos),
         "n_sessions": n,
-        "n_test_sessions": k,
+        "n_test_sessions": k_used,
         "n_test_photos": n_test,
-        "session_fraction_test": round(k / n, 4),
+        "session_fraction_test": round(k_used / n, 4),
+        "dev_seen_forced_train": {"sessions": sorted(i + 1 for i in blocked),
+                                  "photos": sorted(i for i in photos if _dev_seen(i))},
         "photo_fraction_test": round(frac_photos, 4),
         "session_sizes": [len(m) for m in sessions],
         "gap_table": table,
@@ -494,6 +505,10 @@ def build_test_set(
         ex.validate()
         examples.append(ex)
 
+    wanted = {f"{r['id']}.jpg" for r in test}
+    for stale in (out / "images").iterdir():  # 切分改过时，上一版测试集的图不能留在 bench 目录里
+        if stale.is_file() and stale.name not in wanted:
+            stale.unlink()
     keep = [cache[r["id"]] for r in test]  # 只留测试照片的检测，别的照片不进 bench 目录
     cache_path.write_text("".join(json.dumps(v, ensure_ascii=False) + "\n" for v in keep), encoding="utf-8")
     write_jsonl(out / TEST_FILE, examples)
