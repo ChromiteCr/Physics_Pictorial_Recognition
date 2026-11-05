@@ -227,11 +227,13 @@ def convert(peft_dir: str | Path, out_dir: str | Path, fmt: str = "lora", mlx_mo
                          {"format": fmt, "scale": scale, "source": "peft"})
     r = int(cfg["r"])
     suffixes = sorted({row["mlx"].rsplit(".", 1)[-1] for row in rows})
+    # mlx-lm 风格的 keys 是相对每层的路径（如 self_attn.q_proj）；两种写法都放，哪种匹配方式都不会漏
+    rel = sorted({re.sub(r"^.*?layers\.\d+\.", "", row["mlx"]) for row in rows})
     layers = sorted({int(m.group(1)) for row in rows if (m := re.search(r"layers\.(\d+)\.", row["mlx"]))})
     if fmt == "lora":
         acfg = {"format": "mlx-lora", "rank": r, "alpha": cfg.get("lora_alpha"), "scale": scale, "dropout": 0.0,
                 "fine_tune_type": "lora", "num_layers": len(layers),
-                "lora_parameters": {"rank": r, "scale": scale, "dropout": 0.0, "keys": suffixes},
+                "lora_parameters": {"rank": r, "scale": scale, "dropout": 0.0, "keys": rel + suffixes},
                 "target_modules": [row["mlx"] for row in rows],
                 "base_model_name_or_path": cfg.get("base_model_name_or_path"),
                 "peft_lora_dropout": cfg.get("lora_dropout")}
@@ -298,7 +300,8 @@ def inspect_mlx_vlm() -> dict:
     root = Path(list(spec.submodule_search_locations)[0])
     hits = []
     pat = re.compile(r"self\.(lora_a|lora_b|A|B|scale|alpha)\s*=|adapter_config|adapters\.safetensors|"
-                     r"def (apply_lora_layers|get_peft_model|load_adapter)|class \w*Lo[Rr][Aa]\w*")
+                     r"def (apply_lora_layers|get_peft_model|load_adapter)|class \w*Lo[Rr][Aa]\w*|"
+                     r"linear_to_lora_layers|lora_parameters|\bkeys\b|num_layers")
     for f in sorted(root.rglob("*.py")):
         try:
             lines = f.read_text(encoding="utf-8").splitlines()

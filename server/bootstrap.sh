@@ -287,6 +287,7 @@ print(f"  快速路径：{s1['fast_path']}")
 print(f"  对照：{sh['final_step']} 步（S1 {s1['final_step']}），打乱改动 {sh['data']['label_shuffle']['frac_changed']:.0%}")
 assert sh["final_step"] == s1["final_step"] and sh["kept_ids_sha256"] == s1["kept_ids_sha256"]
 EOF
+  [[ $? == 0 ]] || die "冒烟：对照与 S1 的步数或样本不一致（输出保留在 $SM）"
   rm -rf "$SM"
   echo "  冒烟输出已丢弃；摘要留在 $KEEP"
 fi

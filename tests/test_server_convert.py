@@ -53,7 +53,9 @@ def test_round_trip_numeric(tmp_path):
         np.testing.assert_allclose(y_mlx, y_peft, rtol=1e-5, atol=1e-5)
     cfg = json.loads((tmp_path / "mlx" / "adapter_config.json").read_text())
     assert cfg["rank"] == r and cfg["scale"] == pytest.approx(2.0)
-    assert cfg["lora_parameters"]["keys"] == ["down_proj", "k_proj", "q_proj"]
+    assert cfg["lora_parameters"]["keys"] == ["mlp.down_proj", "self_attn.k_proj", "self_attn.q_proj",
+                                              "down_proj", "k_proj", "q_proj"]
+    assert cfg["num_layers"] == 2
 
 
 def test_selftest_cli_math():
