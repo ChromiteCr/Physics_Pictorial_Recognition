@@ -1,0 +1,57 @@
+{
+  "id": "energy",
+  "name_zh": "验证机械能守恒定律",
+  "name_en": "Verifying conservation of mechanical energy (cart on an inclined track)",
+  "grade": "高中",
+  "goal": "让小车从不同高度沿倾斜轨道由静止滑下，比较减少的重力势能 mgh 与增加的动能 ½mv²，验证只有重力做功时机械能守恒。",
+  "principle": "只有重力做功时，物体的动能和重力势能相互转化，总机械能保持不变。小车从测速点上方竖直高度 h 处由静止释放，到达测速点时 mgh = ½mv²，即 ½v² = gh，与质量无关。速度用遮光片宽度 d 除以挡光时间 Δt 得到，遮光片很窄时它近似等于小车经过光电门时的瞬时速度。以 gh 为横轴、½v² 为纵轴作图，若机械能守恒，图线是一条过原点、斜率为 1 的直线。注意不能用 v = √(2gh) 或 v = gt 求速度，否则就是用要验证的结论来验证它自己。",
+  "formula": "mgh = ½mv²，v = d/Δt；作图关系：½v² = g·h（斜率 1，截距 0）",
+  "variables": [
+    {"symbol": "h", "name": "下落高度（释放点到测速点的竖直高度差）", "unit": "m", "role": "control"},
+    {"symbol": "d", "name": "遮光片宽度", "unit": "m", "role": "measured"},
+    {"symbol": "Δt", "name": "遮光片挡光时间", "unit": "s", "role": "measured"},
+    {"symbol": "m", "name": "小车质量", "unit": "kg", "role": "measured"},
+    {"symbol": "v", "name": "小车经过光电门时的速度", "unit": "m/s", "role": "derived"},
+    {"symbol": "ΔE_p", "name": "减少的重力势能 mgh", "unit": "J", "role": "derived"},
+    {"symbol": "ΔE_k", "name": "增加的动能 ½mv²", "unit": "J", "role": "derived"}
+  ],
+  "apparatus": ["轨道（一端可垫高）", "垫块", "小车（带遮光片）", "光电门", "数字计时器", "游标卡尺", "刻度尺", "铅垂线", "天平", "挡板或软垫"],
+  "steps": [
+    "把轨道一端用垫块垫高，使轨道倾斜并固定好；光电门固定在轨道下部，接好数字计时器。最好量出并记下轨道的倾角。",
+    "用游标卡尺测遮光片的宽度 d，用天平测小车的质量 m。",
+    "把小车放在轨道上某一位置，用铅垂线和刻度尺量出释放点到光电门处的竖直高度差 h（两处都量小车上同一个点，例如遮光片中心）。",
+    "让小车从该位置由静止释放，手不要推小车，记下遮光片的挡光时间 Δt，算出 v = d/Δt。",
+    "改变释放位置，使 h 约为 5 cm、10 cm、15 cm、20 cm、25 cm，重复步骤 3、4。",
+    "算出每次的 gh 和 ½v²，以 gh 为横轴、½v² 为纵轴作图，看图线是否过原点、斜率是否为 1；也可以直接比较 mgh 和 ½mv²。"
+  ],
+  "data_table": {"columns": ["次数", "下落高度 h/cm", "挡光时间 Δt/ms", "速度 v/(m·s⁻¹)", "gh/(J·kg⁻¹)", "½v²/(J·kg⁻¹)"]},
+  "safety": [
+    "轨道末端放挡板或软垫，防止小车冲出轨道摔落。",
+    "垫高轨道时把垫块和轨道放稳，防止轨道滑落砸到手脚。",
+    "小车运动时不要用手在轨道上去接，等它停稳再取。"
+  ],
+  "common_causes": [
+    "energy.random_only",
+    "energy.flag_width",
+    "energy.slant_length",
+    "energy.track_friction",
+    "energy.wheel_inertia",
+    "energy.wrong_height_point",
+    "energy.push"
+  ],
+  "knowledge_points": [
+    "kp.mechanical_energy_conservation",
+    "kp.kinetic_energy",
+    "kp.gravitational_potential_energy",
+    "kp.work_energy_theorem",
+    "kp.instantaneous_velocity",
+    "kp.photogate_speed",
+    "kp.friction_work",
+    "kp.rotational_kinetic_energy",
+    "kp.systematic_error",
+    "kp.random_error"
+  ],
+  "relation_family": "proportional",
+  "labsim_id": "energy",
+  "yolo_cues": ["cart", "track"]
+}
