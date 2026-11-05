@@ -4,7 +4,9 @@
 差异（2026-11-05）：
 - 实验 id 换成 labsim 的 id（hooke_law→hooke 等），并带上字母；
 - 动量守恒不再要求检测到细线：同一轨道上两辆小车本身就是强特征，细线只算可选器材；
-- 新增测力计朝向加分（竖直 → 胡克，水平 → 摩擦），以及单摆的弱规则（细线下挂钢球）。
+- 新增测力计朝向加分（竖直 → 胡克，水平 → 摩擦），以及单摆的弱规则（细线下挂钢球）；
+- 画面里有小车或轨道时胡克定律减 0.3 分（自拍照里有打点计时器被标成测力计、单独测力计 + 轨道
+  曾被旧规则"有把握"地判成胡克定律）。
   留出实验的规则分数 < 1，永远不会单独让规则"有把握"，只用来进候选、交给模型或澄清问题。
 检测器只在 run_detector() 里懒加载，导入本模块不会加载 ultralytics。
 """
@@ -199,6 +201,10 @@ def rule_candidates(dets: list[dict]) -> list[dict]:
         if exp_id == "hooke" and "vertical" in dyn_orient:
             score += 0.2
             reasons.append("测力计竖直")
+        # 胡克定律的装置里没有小车和轨道；有它们时单靠一个"测力计"框不足以判定（照片里常是打点计时器被认错）
+        if exp_id == "hooke" and {"cart", "track"} & names:
+            score -= 0.3
+            reasons.append("但画面里有小车或轨道，不像胡克定律装置")
         out.append(_cand(exp_id, score, reasons))
 
     # 留出实验的弱规则（分数 < 1）

@@ -218,6 +218,8 @@ def build(src: Path, out: Path, screen=None, limit: int | None = None, log=print
         "person_screened": screen is not None,
         "person_conf_threshold": PERSON_CONF,
         "provisional_letters": dict(sorted(Counter(r["provisional_letter"] for r in rows).items())),
+        "rule_confident": dict(sorted(Counter(r["provisional_letter"] for r in rows if r["rule_confident"]).items())),
+        "rule_tied_sets": dict(Counter("".join(r["rule_tied"]) or "none" for r in rows if not r["rule_confident"])),
         "needs_review": sum(r["needs_review"] for r in rows),
         "no_gt_boxes": sum(not r["gt_boxes"] for r in rows),
         "yolo_split": dict(Counter(str(r["yolo_split"]) for r in rows)),

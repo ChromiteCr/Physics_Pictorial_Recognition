@@ -152,6 +152,11 @@ def test_rules_tie_and_exclusions():
     pend = cues.analyze([{"class_name": "string", "bbox": [195, 0, 205, 200]},
                          {"class_name": "iron_block", "bbox": [185, 200, 215, 230]}])
     assert pend["tied"] == ["J"] and not pend["confident"]
+    # 单独一个测力计 → 胡克定律有把握；同一画面里有轨道 → 不再有把握
+    assert cues.analyze([{"class_name": "dynamometer", "bbox": [0, 0, 20, 80]}])["confident"]
+    lone = cues.analyze([{"class_name": "dynamometer", "bbox": [0, 0, 20, 20]},
+                         {"class_name": "track", "bbox": [0, 50, 400, 90]}])
+    assert lone["tied"] == ["A"] and not lone["confident"]
 
 
 # ── Set-of-Mark ────────────────────────────────────────────────────────
