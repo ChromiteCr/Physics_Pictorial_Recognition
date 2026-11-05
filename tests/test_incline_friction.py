@@ -172,3 +172,12 @@ def test_dataset_roundtrip():
     from lab_detective.labsim import Dataset
     ds = EXP.simulate(np.random.default_rng(8), "incline_friction.mu_load")
     assert Dataset.from_dict(ds.to_dict()).observations == ds.observations
+
+
+def test_protractor_cause_matches_height_check():
+    """量斜面高度只能查出量角器自身的零点偏差；桌面倾斜时从桌面量的高度仍给出 sin θ_r，
+    所以原因描述里不能把桌面倾斜也算进来。"""
+    c = EXP.cause("incline_friction.protractor_zero")
+    assert "桌面" not in c.description_zh and "table" not in c.description_en
+    c0, _ = EXP.predict("height", np.array([30.0]), np.array([0]), {"mag": np.array([[3.0]])}, c.id)
+    assert float(c0[0, 0, 0]) == pytest.approx(100.0 * math.sin(math.radians(33.0)))

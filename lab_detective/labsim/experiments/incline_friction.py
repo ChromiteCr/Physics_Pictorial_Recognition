@@ -16,8 +16,11 @@
 - v = Δx/t 是挡光期间的平均速度（中间时刻速度），比经过光电门中点时的速度略小；代入后
   a 偏大 a²(τ_A² − τ_B²)/(8d)，τ 为挡光时间，相对误差约 1e−4，忽略。
 - 要能由静止滑下，需 tan θ > μ_静；μ 先验上限约 0.45，最小角 30°（tan 30° = 0.58）留了余量。
-- 读数随机误差主要来自木板各处摩擦不均（δμ ≈ 0.005 → δa ≈ g cos θ·δμ ≈ 0.04 m/s²，近似与角度无关），
-  再加上计时器 0.1 ms 取整，合计取 σ_a = 0.05 m/s²。
+- 读数随机误差：木板各处摩擦不均（δμ ≈ 0.005 → δa ≈ g cos θ·δμ ≈ 0.04 m/s²，近似与角度无关），
+  再加上计时器取整，合计取常数 σ_a = 0.05 m/s²。注意 0.1 ms 取整的影响随角度变大：δa ≈ (v_B²/d)·(δt/t_B)，
+  遮光片 1 cm、在 A 上方约 15 cm 处释放时，30° 约 0.03 m/s²，50° 约 0.1 m/s²（与摩擦不均合成约 0.06~0.12）。
+  引擎的读数噪声不能随控制量变化，所以这里取常数；σ_a = 0.05 相当于计时器分辨率 0.01 ms，
+  用 0.1 ms 计时器的真实数据在大角度处会显得"散布偏大"。
 """
 
 from __future__ import annotations
@@ -93,10 +96,11 @@ _C_RANDOM = Cause(
 # 量角器零点偏差 δ（真实倾角 = 读数 + δ）：a/(g cos θ_r) = (cos δ + μ sin δ)·tan θ_r + (sin δ − μ cos δ)。
 # 仍是严格的直线：斜率变为 g(cos δ + μ sin δ) ≈ g(1 + μδ)（二阶小量，μ = 0.3、δ = 4° 时约 +2%），
 # 截距给出的 μ 却变成 μ cos δ − sin δ ≈ μ − δ（4° → 偏小 0.07，误差很大）。量斜面高度 h = L sin(θ_r + δ) 可直接暴露。
+# 只建模量角器自身的零点偏差：若是桌面倾斜，从桌面量的高度给出的仍是 sin θ_r，量高度查不出来，所以不归入本原因。
 _C_PROTRACTOR = Cause(
     "incline_friction.protractor_zero", "量角器零点不准", "protractor zero offset",
-    "量角器（或角度指针）的零刻度没有对准水平，或者桌面本身不水平，读出的倾角与斜面真实倾角差一个固定角度。",
-    "The protractor's zero is not aligned with the horizontal (or the table is tilted), so every angle "
+    "量角器（或角度指针）的零刻度没有对准水平，读出的倾角与斜面真实倾角差一个固定角度。",
+    "The protractor's zero is not aligned with the horizontal, so every angle "
     "reading differs from the true incline angle by the same amount.",
     "x_offset", ("slope_high", "slope_low"),
     magnitude=Prior.sym_uniform(1.0, 5.0, 10),

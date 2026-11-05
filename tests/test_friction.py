@@ -210,3 +210,33 @@ def test_pull_angle_mu_is_consistent_for_twin_and_engine():
     ds = EXP.extend(rng, ds, EXP.protocols["fixed_scale"].plan)
     cp = posterior(EXP, ds).per_cause[EXP.cause_ids().index("friction.pull_angle")]
     assert cp.map_linear(EXP)["mu"] == pytest.approx(0.4, abs=0.02)
+
+
+def test_fixed_scale_protocol_is_linearised():
+    """改进方案只有固定测力计的读数：面板改用它们作图（原先 n = 0，事实单的一致性为空）。"""
+    from lab_detective.facts import build_fact_sheet
+    ds = EXP.simulate(np.random.default_rng(11), "friction.random_only", protocol="fixed_scale",
+                      linear={"mu": 0.3}, noise_scale=1e-6)
+    panel = compute_panel(EXP.linearise(ds))
+    assert panel.n == 5 and panel.slope == pytest.approx(0.3, abs=1e-6)
+    ds = EXP.simulate(np.random.default_rng(12), "friction.zero_vertical", protocol="fixed_scale",
+                      linear={"mu": 0.3, "hook_weight": 0.2}, noise_scale=1e-6)
+    assert compute_panel(EXP.linearise(ds)).intercept == pytest.approx(-0.2, abs=1e-6)
+    assert build_fact_sheet(EXP, ds)["agreement"]["value"] is not None
+    # 标准方案再加做 fixed_scale 菜单项时，面板仍只用手拉的 5 个读数
+    rng = np.random.default_rng(13)
+    ds = EXP.extend(rng, EXP.simulate(rng, "friction.random_only"), EXP.menu_item("fixed_scale").plan)
+    assert compute_panel(EXP.linearise(ds)).n == 5
+
+
+def test_scale_range_covers_simulated_readings():
+    """μ 取先验 +3σ、压力 6 N，再叠加最大的加速度或木板倾角，示数仍在 5 N 量程内（2.5 N 会超程）。"""
+    mu = EXP.linear[0].mean + 3 * EXP.linear[0].sd
+    a_max = EXP.cause("friction.accelerating").magnitude.b
+    b_max = EXP.cause("friction.board_tilt").magnitude.b
+    worst = max(_mean(EXP, "friction.accelerating", "main", 6.0, a_max, mu),
+                _mean(EXP, "friction.board_tilt", "main", 6.0, b_max, mu))
+    assert 2.5 < worst < 5.0
+    card = json.loads((Path(__file__).resolve().parents[1]
+                       / "lab_detective/knowledge/data/cards/friction.json").read_text(encoding="utf-8"))
+    assert any("量程 5 N" in a for a in card["apparatus"])

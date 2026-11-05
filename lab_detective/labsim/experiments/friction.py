@@ -8,9 +8,10 @@
 示数稳定，而且不要求木板匀速（滑动摩擦力与相对速度无关）。
 
 面板坐标：横轴 = 压力 N（N，由木块和钩码的重力算出，视为准确），纵轴 = 测力计示数 F（N）。
-理想直线 F = μ·N，截距 0，斜率 μ 自由（线性参数）。
+理想直线 F = μ·N，截距 0，斜率 μ 自由（线性参数）。数据里没有手拉读数时（fixed_scale 方案）改用固定测力计的读数作图。
+量程按 5 N：μ 先验 +3σ（0.51）× 6 N ≈ 3.1 N，再加上加速、倾斜原因最大约 3.7 N，2.5 N 量程会超程。
 
-仪器：弹簧测力计分度值默认 0.1 N（2.5 N 量程；构造参数 scale_division 可改为 0.2 N），
+仪器：弹簧测力计量程 5 N，分度值默认 0.1 N（构造参数 scale_division 可改为 0.2 N），
 初中读到分度值。手拉时指针随木块的"走走停停"抖动，读数随机误差取 0.05 N；固定测力计时指针稳定，取 0.02 N。
 
 几个原因都是"纯比例"的（斜拉、加速拉、木板不水平）：斜率自由时它们只是让 μ 看起来偏大或偏小，
@@ -246,9 +247,12 @@ class Friction(Experiment):
         return base
 
     def linearise(self, ds: Dataset) -> LinearData:
-        idx = [i for i, o in enumerate(ds.observations) if o.kind == "main"]
+        # 默认用手拉读数；只有固定测力计的读数时（fixed_scale 方案）用它们，理想关系同样是 F = μN
+        kind = "main" if any(o.kind == "main" for o in ds.observations) else "fixed"
+        idx = [i for i, o in enumerate(ds.observations) if o.kind == kind]
         x = np.array([ds.observations[i].setting for i in idx])
         y = np.array([ds.observations[i].values[0] for i in idx])
-        r = self.obs_kinds["main"].readings[0]
+        r = self.obs_kinds[kind].readings[0]
         sy = np.full(y.shape, float(np.sqrt(r.sigma**2 + r.resolution**2 / 12)))
-        return LinearData(x, y, sy, np.array(idx), "压力 N (N)", "拉力 F (N)", None, 0.0)
+        y_label = "拉力 F (N)" if kind == "main" else "测力计示数 F (N)"
+        return LinearData(x, y, sy, np.array(idx), "压力 N (N)", y_label, None, 0.0)
