@@ -50,6 +50,7 @@
 | `local_llm.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
 | `watchdog.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
 | `app.py`（P2 新增 UI 部分） | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
+| `lab_detective/physics/*`（物理组件层）、`tests/test_physics_*.py` | AI（2026-11-05） | GPT 代理（未核实是否已审查） | AI 编写，待审查 |
 | `lab_detective/training/prompts.py`、`splits.py`、`tasks_diagnose.py`、`tasks_design.py`、`tasks_explain.py`、`tasks_knowledge.py`、`generate.py`；`tests/test_training_tasks.py` | AI（2026-11-05） | GPT 代理（未核实是否已审） | 已完成代码与测试；扣下原因的选择待学生确认 |
 | 研究计划 | 学生本人 | — | 学生本人完成（进度未核实） |
 | 手推原因特征 | 学生本人 | — | 学生本人完成（进度未核实） |
@@ -59,6 +60,19 @@
 ## 3. 变更日志
 
 按日期倒序，新条目加在最上面。每条写清：日期、改动范围、哪些由 AI 完成。
+
+### 2026-11-05（五）：物理组件层
+
+- AI 新建 `lab_detective/physics/`：`base.py`（误差机制 Effect、组件、附加测量、主测量变体、控制量、装置 Setup、仿射量 Affine）、
+  `components.py`（小车、木块、小球、摆球、挂钩、弹簧、细线、滑轮、手拉、释放、导轨、斜面、木板、杠杆）、
+  `instruments.py`（刻度尺、弹簧测力计、秒表、手机计时、光电门、打点计时器、天平、量角器、游标卡尺）、
+  `templates.py`（11 条规律模板）、`compose.py`（Setup → 符合 labsim 接口的实验）、`catalog.py`（镜像 5 个精选实验 + 5 个新组合）、
+  `from_photo.py`（识别结果 → 候选装置和未决问题），以及 `tests/test_physics_{core,mirror,compositions,from_photo}.py`。
+- 组件的物理和默认先验是从已精修的精选实验里提取的（AI 提取，镜像测试证明与精选实验逐项一致）；新组合的物理推导写在代码注释里，
+  其默认数值（小车 1 kg、倾角 5°、弹簧 20 g、钢球直径 2.00 cm、各误差的幅度范围等）是 AI 定的工程假设，**未经学生审核**。
+- AI 修改 `docs/ARCHITECTURE.md`（创新点 1、3 的措辞，目录表补 `physics/`，新增 §2.8）、`docs/isef/innovation-and-boundaries.md`、
+  `docs/isef/2026-11-05-implementation-plan.md`（labsim 一行不再写固定实验数，补组件层）和 `README.md` 版本记录。
+- 待学生确认：5 个新组合的装置细节是否符合你们实验室的器材；它们默认是留出装置（迁移测试用），是否进训练由学生决定。
 
 ### 2026-11-05（四）：引擎标注的训练样本生成器
 

@@ -1,6 +1,6 @@
 # 力学实验智能助教 Physics Pictorial Recognition
 
-![version](https://img.shields.io/badge/version-P2-blue)
+![version](https://img.shields.io/badge/version-P2a-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/Physics_Pictorial_Recognition)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/Physics_Pictorial_Recognition)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/Physics_Pictorial_Recognition)
@@ -215,6 +215,7 @@ A: `tools/yolo/autolabel_glm.py` 内置指数退避重试，也支持断点续�
 
 | 版本 | 日期       | 变更内容                                                                                                   | 类型      |
 | ---- | ---------- | ------------------------------------------------------------------------------------------------------------ | --------- |
+| P2a  | 2026-11-05 | 新增物理组件层 lab_detective/physics：物体、连接件、表面、仪器和规律模板组合成实验孪生；镜像 5 个精选实验（预测逐项一致）、5 个留出新组合、看图建模候选与未决问题 | feat      |
 | P2   | 2026-11-05 | 进入 ISEF 升级阶段（实验侦探）：仓库重构（YOLO 工具移入 tools/yolo、旧笔记移入 docs/history、权重改放 assets/weights、新增 pyproject 与 uv 环境） | milestone |
 | P1b3 | 2026-07-31 | 第二轮论文修改：§3.2 新增模型参数表、§4.2 结果改为表格、新增新类别退化分析（docx + main.tex 同步）                 | feat      |
 | P1b2 | 2026-07-31 | 修正 README 第三轮 mAP 数值（0.743→0.577）与数据集规模（1296→809），与训练日志/论文对齐                    | fix       |
