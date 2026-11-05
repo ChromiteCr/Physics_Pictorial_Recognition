@@ -119,7 +119,8 @@ def _causes(timer: str) -> tuple[Cause, ...]:
             fix_en="Measure the flag width with a vernier caliper and recompute the speeds.",
         ),
         # 推导：学生把沿轨道的距离 s 记成 h，真实下落高度 h = s·sinθ，
-        # ½v² = g s sinθ = sinθ·(g s)，所以斜率 = sinθ（倾角 12°~30° → 0.21~0.5）；记录了倾角时 sinθ 已知，没有自由参数。
+        # ½v² = g s sinθ = sinθ·(g s)，所以斜率 = sinθ（倾角 12°~30° → 0.21~0.5）。
+        # 只在没记录倾角时列入（构造时给出 angle_deg 就去掉这个原因）。
         Cause(
             SLANT, "把斜面上的距离当成了下落高度", "slant distance used as height",
             "没有测竖直高度差，而是把小车沿轨道滑过的距离当成了下落高度 h，也没有记录轨道的倾角。",
@@ -250,7 +251,9 @@ class Energy(Experiment):
             self.menu = _menu(timer)
             self.linear = (LinearParam("w_true", self.flag_mm, 0.02, "遮光片真实宽度", "mm"),) if timer == "photogate" else ()
         if angle_deg is not None:
+            # 记录了倾角：学生可以用 h = s·sinθ 换算，"把斜面距离当高度"不再列为候选原因
             self.nuisance = {"theta_deg": Prior.point(angle_deg)}
+            self.causes = tuple(c for c in self.causes if c.id != SLANT)
 
     def relevant_nuisance(self, cause_id, kinds):
         if cause_id in (SLANT, FRICTION):

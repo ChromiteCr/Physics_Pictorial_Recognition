@@ -14,6 +14,12 @@
       "role": "control"
     },
     {
+      "symbol": "t",
+      "name": "N 次全振动的总时间",
+      "unit": "s",
+      "role": "measured"
+    },
+    {
       "symbol": "l",
       "name": "摆线长（悬点到摆球上端）",
       "unit": "m",
@@ -23,12 +29,6 @@
       "symbol": "d",
       "name": "摆球直径",
       "unit": "m",
-      "role": "measured"
-    },
-    {
-      "symbol": "t",
-      "name": "N 次全振动的总时间",
-      "unit": "s",
       "role": "measured"
     },
     {

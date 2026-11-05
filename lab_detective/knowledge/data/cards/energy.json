@@ -14,15 +14,15 @@
       "role": "control"
     },
     {
-      "symbol": "d",
-      "name": "遮光片宽度",
-      "unit": "m",
-      "role": "measured"
-    },
-    {
       "symbol": "Δt",
       "name": "遮光片挡光时间",
       "unit": "s",
+      "role": "measured"
+    },
+    {
+      "symbol": "d",
+      "name": "遮光片宽度",
+      "unit": "m",
       "role": "measured"
     },
     {
@@ -148,7 +148,8 @@
       "kp.graph_slope_intercept"
     ]
   },
-  "relation_family": "proportional",
+  "relation_family": "power",
+  "exponent": -0.5,
   "labsim_id": "energy",
   "yolo_cues": [
     "cart",

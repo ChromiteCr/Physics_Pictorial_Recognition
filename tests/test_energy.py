@@ -142,18 +142,29 @@ def test_posterior_is_fast():
 def test_ticker_profile_and_recorded_angle():
     exp = Energy(timer="ticker", angle_deg=15.0)
     assert "energy.flag_width" not in exp.cause_ids()
+    assert "energy.slant_length" not in exp.cause_ids()  # 记录了倾角就不列"斜面距离当高度"
     assert exp.linear == ()
     rng = np.random.default_rng(10)
     ds = exp.simulate(rng, "energy.random_only", noise_scale=1e-6)
     assert compute_panel(exp.linearise(ds)).slope == pytest.approx(1.0, abs=0.04)
-    ds = exp.simulate(rng, "energy.slant_length")
-    post = posterior(exp, ds)
-    assert post.probs.sum() == pytest.approx(1.0)
-    assert post.top() == "energy.slant_length"
+    ok = 0
+    for _ in range(10):
+        ds = exp.simulate(rng, "energy.wrong_height_point", magnitude=3.0)
+        post = posterior(exp, ds)
+        assert post.probs.sum() == pytest.approx(1.0)
+        ok += post.top() == "energy.wrong_height_point"
+    assert ok >= 7
     ds2 = exp.extend(rng, ds, exp.menu_item("height_check").plan)
     assert posterior(exp, ds2).probs.sum() == pytest.approx(1.0)
-    # 默认实例不受影响
-    assert "energy.flag_width" in EXP.cause_ids()
+    # 默认实例不受影响；只给倾角时斜面距离原因也去掉
+    assert "energy.flag_width" in EXP.cause_ids() and "energy.slant_length" in EXP.cause_ids()
+    assert "energy.slant_length" not in Energy(angle_deg=20.0).cause_ids()
+
+
+def test_single_protocol_runs():
+    ds = EXP.simulate(np.random.default_rng(12), "energy.push", protocol="single")
+    assert EXP.linearise(ds).x.size == 1
+    assert posterior(EXP, ds).probs.sum() == pytest.approx(1.0)
 
 
 def test_dataset_roundtrip():

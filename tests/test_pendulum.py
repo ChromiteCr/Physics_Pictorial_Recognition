@@ -148,6 +148,12 @@ def test_stopwatch_profile():
     assert EXP.obs_kinds["main"].readings[0].sigma < 0.05
 
 
+def test_single_protocol_runs():
+    ds = EXP.simulate(np.random.default_rng(11), "pendulum.top_of_bob", protocol="single")
+    assert EXP.linearise(ds).x.size == 1
+    assert posterior(EXP, ds).probs.sum() == pytest.approx(1.0)
+
+
 def test_dataset_roundtrip():
     from lab_detective.labsim import Dataset
     ds = EXP.simulate(np.random.default_rng(10), "pendulum.miscount")
