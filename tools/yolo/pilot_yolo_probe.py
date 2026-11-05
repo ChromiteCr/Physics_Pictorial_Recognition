@@ -20,7 +20,7 @@ from pathlib import Path
 import cv2
 from ultralytics import YOLO
 
-PROJ_DIR = Path(__file__).parent
+PROJ_DIR = Path(__file__).resolve().parents[2]  # 仓库根目录（P2 起脚本移到 tools/yolo/）
 DEFAULT_IMAGE = PROJ_DIR / "testi.png"
 
 # 本项目最终需要识别的力学器材（对照组，来自 data/dataset.yaml 的 6 类；

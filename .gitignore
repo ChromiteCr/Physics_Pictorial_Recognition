@@ -49,3 +49,13 @@ data/openclaw/images/
 data/video/
 data/video_frames/images/
 self-captured/images/
+
+# ── P2（2026-11-05）新增 ─────────────────────────────────────────
+# Python 虚拟环境
+.venv/
+# 本地权重副本（第三轮 YOLO best.pt、COCO yolov8n.pt），见 assets/README.md
+assets/weights/
+# 实验结果、冻结测试集等大文件另行归档
+results/
+*.egg-info/
+.pytest_cache/

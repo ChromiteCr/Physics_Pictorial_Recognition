@@ -44,7 +44,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-PROJ = Path(__file__).parent
+PROJ = Path(__file__).resolve().parents[2]  # 仓库根目录（P2 起脚本移到 tools/yolo/）
 
 # class id 与 data/dataset.yaml 对齐。不含 spring(2)/ruler(4)：2026-07-14 起
 # 按要求在所有标注代码里忽略这两类（spring 历史上误检率过高，ruler 是 track/ruler
@@ -59,7 +59,7 @@ CLASS_NAMES = {
 }
 NAME_TO_ID = {name: cid for cid, name in CLASS_NAMES.items()}
 
-DEFAULT_CLASS_DESC_FILE = PROJ / "class_descriptions.json"
+DEFAULT_CLASS_DESC_FILE = Path(__file__).resolve().parent / "class_descriptions.json"
 MODEL_CHOICES = ["glm-4.6v-flash", "glm-4.6v"]
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 

@@ -1,0 +1,36 @@
+[project]
+name = "physics-pictorial-recognition"
+version = "2.0.0.dev0"
+description = "实验侦探 Lab Detective：中学力学实验误差来源诊断（离线）"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "scikit-learn>=1.5",
+]
+
+[project.optional-dependencies]
+# 原 Streamlit 网页 + YOLO 识别（P1 起就有的部分）
+app = [
+    "streamlit>=1.35.0",
+    "streamlit-drawable-canvas>=0.9.3",
+    "pandas>=2.0.0",
+    "matplotlib>=3.8.0",
+    "pillow>=10.0.0",
+    "opencv-python-headless>=4.9.0",
+    "ultralytics>=8.2.0",
+]
+# 本地视觉语言模型服务（只在 Apple Silicon 的 Mac 上装）
+mac-llm = [
+    "mlx-vlm>=0.3",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["lab_detective*"]

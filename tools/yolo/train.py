@@ -27,7 +27,7 @@
 
 from pathlib import Path
 
-PROJ_DIR = Path(__file__).parent
+PROJ_DIR = Path(__file__).resolve().parents[2]  # 仓库根目录（P2 起脚本移到 tools/yolo/）
 DATA_YAML = PROJ_DIR / "data" / "dataset.yaml"
 RUNS_DIR = PROJ_DIR / "runs"
 

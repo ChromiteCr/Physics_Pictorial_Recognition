@@ -18,6 +18,7 @@ detect.py 只负责"识别器材"这一件事，外加可选的视频轨迹提�
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import cv2
@@ -26,7 +27,11 @@ from ultralytics import YOLO
 from physics import track_marker
 
 PROJ_DIR = Path(__file__).parent
-DEFAULT_WEIGHTS = PROJ_DIR / "runs" / "detect" / "train" / "weights" / "best.pt"
+# P2（2026-11-05）：第三轮训练权重（mAP@0.5=0.577，原 runs/detect/train/weights/best.pt）
+# 复制到 assets/weights/，不进版本库；可用环境变量 PPR_YOLO_WEIGHTS 指向别处。
+DEFAULT_WEIGHTS = Path(
+    os.environ.get("PPR_YOLO_WEIGHTS", PROJ_DIR / "assets" / "weights" / "best.pt")
+)
 
 CLASS_NAMES = {
     0: "cart",

@@ -21,7 +21,7 @@ import json
 import cv2
 from pathlib import Path
 
-PROJ = Path(__file__).parent
+PROJ = Path(__file__).resolve().parents[2]  # 仓库根目录（P2 起脚本移到 tools/yolo/）
 DEFAULT_DIR = PROJ / "data" / "self_captured"
 OUT_HTML = PROJ / "output" / "label_gallery.html"
 
