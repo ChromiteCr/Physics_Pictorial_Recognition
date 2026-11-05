@@ -32,7 +32,7 @@ from ..uncertainty import budget
 from . import prompts
 from .format import Example
 from .splits import allowed_causes, example_rng, example_seed
-from .tasks_diagnose import sample_experiment, shuffled_ids
+from .tasks_diagnose import sample_experiment
 
 DESIGN_GENERIC_FRACTION = 0.7
 P_SINGLE = 0.2
@@ -191,12 +191,7 @@ def build_example(index: int, split: str, base_seed: int | None = None,
     rows_exp = expected_rows(exp, protocol, rng)
     b = _budget(exp, generic, rng)
     arows = _atlas(exp, protocol, causes, generic, rng)
-    disp = shuffled_ids(rng, list(causes), "C")
-    menu_disp = shuffled_ids(rng, [m.id for m in exp.menu], "M")
-    menu = [{"id": d, "item_id": m} for m, d in menu_disp.items()]
-    cands = [{"id": d, "name": exp.cause(c).name_zh, "description": exp.cause(c).description_zh}
-             for c, d in disp.items()]
-    messages = prompts.build_design_messages(exp, protocol, rows_exp, budget_line(b), cands, menu)
+    messages, disp, menu_disp = prompts.design_prompt(exp, protocol, rows_exp, budget_line(b), causes, rng)
     rec = recommend(exp, protocol, b)
     dom = dominant_source(b)
     unres = unresolved(arows, disp, menu_disp)

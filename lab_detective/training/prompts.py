@@ -377,6 +377,41 @@ def _messages(user: str) -> list[dict]:
     return [{"role": "system", "content": SYSTEM_PROMPT_ZH}, {"role": "user", "content": user}]
 
 
+# ── 编号打乱（训练、bench、推理共用同一套做法）────────────────────────────
+
+
+def shuffle_ids(rng, ids: Sequence[str], prefix: str) -> dict[str, str]:
+    """真实 id → 显示编号（C1…/M1…），显示顺序随机。返回的字典按显示顺序排列。"""
+    perm = rng.permutation(len(ids))
+    return {ids[int(j)]: f"{prefix}{i + 1}" for i, j in enumerate(perm)}
+
+
+def candidate_list(exp: Experiment, cause_disp: Mapping[str, str]) -> list[dict]:
+    return [{"id": d, "name": exp.cause(c).name_zh, "description": exp.cause(c).description_zh}
+            for c, d in cause_disp.items()]
+
+
+def menu_list(menu_disp: Mapping[str, str]) -> list[dict]:
+    return [{"id": d, "item_id": m} for m, d in menu_disp.items()]
+
+
+def shuffled_display(exp: Experiment, cause_ids: Sequence[str], rng) -> tuple[dict[str, str], dict[str, str]]:
+    """先打乱候选原因、再打乱追加测量（顺序固定，样本可复现）→ (原因 id → C 编号, 菜单 id → M 编号)。"""
+    cause_disp = shuffle_ids(rng, list(cause_ids), "C")
+    menu_disp = shuffle_ids(rng, [m.id for m in exp.menu], "M")
+    return cause_disp, menu_disp
+
+
+def diagnose_prompt(exp: Experiment, ds: Dataset, cause_ids: Sequence[str], rng,
+                    propose: bool = False) -> tuple[list[dict], dict[str, str], dict[str, str]]:
+    """诊断提示的完整构造（打乱编号 + 拼消息）→ (messages, 原因 id → C 编号, 菜单 id → M 编号)。
+
+    propose=True 时不给候选清单（编号照样分配，供打乱标签对照和评分对照名称）。"""
+    cause_disp, menu_disp = shuffled_display(exp, cause_ids, rng)
+    cands = None if propose else candidate_list(exp, cause_disp)
+    return build_diagnose_messages(exp, ds, cands, menu_list(menu_disp)), cause_disp, menu_disp
+
+
 # ── 诊断 ──────────────────────────────────────────────────────────────
 
 DIAGNOSE_TASK = ("【任务】诊断：学生做完了下面的测量。根据数据和特征面板，判断各候选原因的可能性，"
@@ -488,6 +523,15 @@ def build_design_messages(exp: Experiment, protocol: str, expected_rows: Sequenc
              menu_text(exp, menu),
              DESIGN_RULES]
     return _messages("\n\n".join(parts))
+
+
+def design_prompt(exp: Experiment, protocol: str, expected_rows: Sequence[Mapping], budget_line: str,
+                  cause_ids: Sequence[str], rng) -> tuple[list[dict], dict[str, str], dict[str, str]]:
+    """设计提示的完整构造（打乱编号 + 拼消息）→ (messages, 原因 id → C 编号, 菜单 id → M 编号)。"""
+    cause_disp, menu_disp = shuffled_display(exp, cause_ids, rng)
+    msgs = build_design_messages(exp, protocol, expected_rows, budget_line, candidate_list(exp, cause_disp),
+                                 menu_list(menu_disp))
+    return msgs, cause_disp, menu_disp
 
 
 # ── 讲解（与推理时完全相同的上下文组装）──────────────────────────────────

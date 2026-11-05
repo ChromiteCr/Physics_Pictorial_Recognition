@@ -75,6 +75,8 @@ def test_seeds_are_deterministic_and_train_val_disjoint():
     assert splits.example_seed("diagnose", "train", 0) != splits.example_seed("design", "train", 0)
     with pytest.raises(ValueError):
         splits.example_seed("diagnose", "bench", 0)
+    bench = {splits.bench_seed("diagnose", i) for i in range(3000)}
+    assert not bench & tr and not bench & va
     assert splits.split_counts(100) == (95, 5)
     assert splits.split_counts(20000) == (19000, 1000)
     assert splits.split_counts(1) == (1, 0)
@@ -146,6 +148,8 @@ def test_diagnose_target_matches_engine_conventions(named_diag):
                 assert tgt["next_measurement"]["id"] in ex.meta["menu_map"]
                 top2 = [r["cause_id"] for r in tgt["ranked"][:2]]
                 assert [p["cause_id"] for p in tgt["next_measurement"]["predicted"]] == top2
+            if ex.meta["next_no_separation"]:  # 引擎说没有测量能分开 → 目标写 null，讲解也不推荐测量
+                assert tgt["next_measurement"] is None and "下一步：" not in tgt["explanation"]
             if ex.meta["variant"] == "omit_true":
                 assert ex.meta["truth_cause"] not in ex.meta["id_map"].values()
     # 讲解绝大多数能直接通过校验器

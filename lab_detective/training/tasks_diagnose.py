@@ -12,7 +12,8 @@
   evidence     事实单里最可能原因的证据句
   ranked       全部候选原因（按未取整的后验从大到小），prob 取整到 0.05，expect = 原因在标准方案下的预期特征
   not_in_list  引擎的失配判据
-  next_measurement  EIG 最大的追加测量（n_samples≈64），predicted = 后验前两名原因下的预期读数
+  next_measurement  EIG 最大的追加测量（n_samples≈64），predicted = 后验前两名原因下的预期读数；
+               引擎认为没有测量能分开剩下的原因（EIG < eig.NO_SEPARATION_BITS，separates 为空）时为 null
   agreement    一致性色带（consistent / tension / inconsistent / null）
   explanation  ≤ 80 字，用 tutor/templates.py 的讲解块拼成，数字与上面一致并尽量通过校验器
 meta.causes = [{"id": "C3", "name": 中文名}]（打乱标签对照按它置换），meta.id_map 记显示编号 → 真实原因 id。
@@ -120,12 +121,6 @@ def round_prob(p: float, step: float = PROB_STEP) -> float:
     return round(round(float(p) / step) * step, 2)
 
 
-def shuffled_ids(rng: np.random.Generator, ids, prefix: str) -> dict[str, str]:
-    """真实 id → 显示编号（C1…/M1…），显示顺序随机。返回的字典按显示顺序排列。"""
-    perm = rng.permutation(len(ids))
-    return {ids[int(j)]: f"{prefix}{i + 1}" for i, j in enumerate(perm)}
-
-
 # ── 短讲解（≤ 80 字）────────────────────────────────────────────────
 
 _NONE_CLAUSE = re.compile(r"[^，；。]*=\s*None[^，；。]*[，；]?")
@@ -135,6 +130,21 @@ def clean_evidence(ev: str) -> str:
     """去掉证据句里没有数值的分句（如截距没有理论值时的"截距 z=None"）。"""
     return _NONE_CLAUSE.sub("", ev or "").strip("，； ")
 
+
+
+def _first_clause(ev: str) -> str:
+    """证据句的第一个带数字的分句（括号里的逗号不拆）。"""
+    first = ev.split("；")[0]
+    parts, depth, cur = [], 0, ""
+    for ch in first:
+        depth += (ch in "（(") - (ch in "）)")
+        if ch == "，" and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    parts.append(cur)
+    return next((p for p in parts if any(c.isdigit() for c in p)), first)
 
 
 def short_explanation(fs: dict, probs: dict[str, float], top2: list[str],
@@ -171,7 +181,7 @@ def short_explanation(fs: dict, probs: dict[str, float], top2: list[str],
                    if str(top.get("cause_id", "")).endswith(".random_only") else f"最可能是「{name}」（{pct}%）。")
     ev = clean_evidence(top.get("evidence") or "").rstrip("。")
     e_full = f"证据：{ev}。" if ev else ""
-    e_one = f"证据：{ev.split('；')[0]}。" if ev else ""
+    e_one = f"证据：{_first_clause(ev)}。" if ev else ""
     n_two = tpl.block_next(f2)
     if nm and nm.get("label"):
         head = f"下一步：{nm['label'].rstrip('。')}。"
@@ -179,7 +189,9 @@ def short_explanation(fs: dict, probs: dict[str, float], top2: list[str],
         n_one = (head[:-1] + f"，若是「{pr[0].get('name', '')}」预计 {tpl.with_unit(pr[0]['value'], pr[0].get('unit', ''))}。"
                  if pr and pr[0].get("value") is not None else head)
     else:
-        head = n_one = n_two
+        # 没有能分开剩下原因的测量：已经确定时说"不需要追加测量"，否则说"分不开"
+        sure = (top.get("prob") or 0.0) >= 0.95 and not dg.get("not_in_list")
+        head = n_one = n_two = ("原因已经清楚，不需要追加测量。" if sure else "现有的追加测量都分不开剩下的原因。")
     options = [c_long + e_full + n_two, c_long + e_one + n_two, c_short + e_one + n_two, c_short + e_one + n_one,
                c_short + e_one + head, c_short + n_one, c_long + e_one + head, c_short + head]
     fitting = list(dict.fromkeys(t for t in options if tpl.nchars(t) <= limit))
@@ -192,11 +204,6 @@ def short_explanation(fs: dict, probs: dict[str, float], top2: list[str],
 
 
 # ── 一条样本 ──────────────────────────────────────────────────────────
-
-
-def _candidates(exp: Experiment, disp: dict[str, str]) -> list[dict]:
-    return [{"id": d, "name": exp.cause(c).name_zh, "description": exp.cause(c).description_zh}
-            for c, d in disp.items()]
 
 
 def build_example(index: int, split: str, base_seed: int | None = None, generic_fraction: float = GENERIC_FRACTION,
@@ -221,20 +228,22 @@ def build_example(index: int, split: str, base_seed: int | None = None, generic_
     ranked_ids = [cand[j] for j in order]
     probs = {cand[j]: round_prob(post.probs[j]) for j in range(len(cand))}
     top2 = ranked_ids[:2]
-    disp = shuffled_ids(rng, cand, "C")
-    menu_disp = shuffled_ids(rng, [m.id for m in exp.menu], "M")
-    menu = [{"id": d, "item_id": m} for m, d in menu_disp.items()]
+    messages, disp, menu_disp = prompts.diagnose_prompt(exp, case.ds, cand, rng, propose=variant == "propose")
 
     panel = fs.get("panel") or {}
     sigs = list(panel.get("signatures") or ["none"])
     dg = fs.get("diagnosis") or {}
     evidence = clean_evidence((dg.get("ranked") or [{}])[0].get("evidence", ""))
     nm = fs.get("next_measurement")
+    # EIG 低于 eig.NO_SEPARATION_BITS 时引擎的 separates 为空：菜单里没有能分开剩下原因的测量 → 目标写 null
+    no_separation = bool(nm) and not nm.get("separates")
+    if no_separation:
+        nm = None
+    fs_t = dict(fs, next_measurement=nm)
     pred_by = {p["cause_id"]: p for p in (nm or {}).get("predicted") or []}
-    explanation, verified = short_explanation(fs, probs, top2, propose=variant == "propose")
+    explanation, verified = short_explanation(fs_t, probs, top2, propose=variant == "propose")
 
     if variant == "propose":
-        messages = prompts.build_diagnose_messages(exp, case.ds, None, menu)
         names = {c: exp.cause(c).name_zh for c in cand}
         target = {
             "signatures": sigs, "evidence": evidence,
@@ -250,7 +259,6 @@ def build_example(index: int, split: str, base_seed: int | None = None, generic_
         }
         schema = "propose"
     else:
-        messages = prompts.build_diagnose_messages(exp, case.ds, _candidates(exp, disp), menu)
         target = {
             "signatures": sigs, "evidence": evidence,
             "ranked": [{"cause_id": disp[c], "prob": probs[c], "expect": list(exp.cause(c).signatures)}
@@ -271,7 +279,8 @@ def build_example(index: int, split: str, base_seed: int | None = None, generic_
         "truth_magnitude": case.ds.truth.get("magnitude") if case.ds.truth else None,
         "causes": [{"id": d, "name": exp.cause(c).name_zh} for c, d in disp.items()],
         "id_map": {d: c for c, d in disp.items()}, "menu_map": {d: m for m, d in menu_disp.items()},
-        "top_cause": ranked_ids[0], "explanation_verified": verified, "prompt_version": prompts.PROMPT_VERSION,
+        "top_cause": ranked_ids[0], "explanation_verified": verified, "next_no_separation": no_separation,
+        "prompt_version": prompts.PROMPT_VERSION,
     }
     if case.generic:
         meta["instance_id"] = exp.id

@@ -107,6 +107,12 @@ def example_seed(task: str, split: str, index: int, base: int = BASE_SEED) -> in
     return int(ss.generate_state(1, dtype=np.uint64)[0] >> np.uint64(1))
 
 
+def bench_seed(task: str, index: int, base: int = BASE_SEED) -> int:
+    """冻结测试集（bench）专用的种子命名空间，和 train / val 互不重叠。只给 bench 生成器用，训练生成器从不调用。"""
+    ss = np.random.SeedSequence([int(base), TASK_CODES[task], SPLIT_CODES["bench"], int(index)])
+    return int(ss.generate_state(1, dtype=np.uint64)[0] >> np.uint64(1))
+
+
 def example_rng(task: str, split: str, index: int, base: int = BASE_SEED) -> np.random.Generator:
     return np.random.default_rng(example_seed(task, split, index, base))
 
