@@ -74,8 +74,10 @@ class Friction(Experiment):
 
     obs_kinds = _obs_kinds(0.1)
 
-    # 拉角原因里读数对 μ 非线性，μ 改放网格（只对该原因生效，见 relevant_nuisance）
-    nuisance = {"mu_pull": Prior.normal(0.30, 0.07, 141)}
+    # 拉角原因：F = μW/(cos α + μ sin α) 对 μ 非线性。分子里的 μ 仍是线性参数（估计值给下游用），
+    # 分母里的 μ 放在一个小网格上（数据对它几乎不敏感，只对该原因生效，见 relevant_nuisance）；
+    # 模拟和孪生里两者取同一个真值（见 draw_truth / _mean_and_sigma），正向物理是精确的。
+    nuisance = {"mu_pull": Prior.normal(0.30, 0.07, 15)}
 
     # 木块与木板间的动摩擦因数：0.09~0.51（±3σ）
     linear = (LinearParam("mu", 0.30, 0.07, "动摩擦因数 μ", ""),)
@@ -195,12 +197,14 @@ class Friction(Experiment):
 
     def draw_truth(self, rng, cause_id, magnitude=None, nuisance=None, linear=None):
         t = super().draw_truth(rng, cause_id, magnitude, nuisance, linear)
-        # 网格上的 μ（拉角原因用）与线性参数 μ 取同一个真值
-        if nuisance and "mu_pull" in nuisance:
-            t["linear"]["mu"] = t["nuisance"]["mu_pull"]
-        else:
-            t["nuisance"]["mu_pull"] = t["linear"]["mu"]
+        t["nuisance"]["mu_pull"] = t["linear"]["mu"]  # 分母里的 μ 与线性参数 μ 是同一个真值
         return t
+
+    def _mean_and_sigma(self, truth, kind, settings, order):
+        # 孪生（twin）直接拼真值字典，这里再同步一次
+        if truth["cause"] == "friction.pull_angle":
+            truth = dict(truth, nuisance=dict(truth["nuisance"], mu_pull=truth["linear"]["mu"]))
+        return super()._mean_and_sigma(truth, kind, settings, order)
 
     def relevant_nuisance(self, cause_id, kinds):
         return ("mu_pull",) if cause_id == "friction.pull_angle" else ()
@@ -220,16 +224,11 @@ class Friction(Experiment):
             raise KeyError(kind)
         W = np.broadcast_to(settings[None, :], (P, n))  # 记录的压力（N）
         hand = kind != "fixed"  # 手拉（含反向）才受拉法影响
-        if name == "pull_angle":
-            mu = params["mu_pull"]
-            if hand:
-                a = np.deg2rad(params["mag"])
-                c[:, :, 0] = mu * W / (np.cos(a) + mu * np.sin(a))
-            else:
-                c[:, :, 0] = mu * W
-            return c, U
         u = W
-        if name == "board_tilt":
+        if name == "pull_angle" and hand:
+            a = np.deg2rad(params["mag"])
+            u = W / (np.cos(a) + params["mu_pull"] * np.sin(a))
+        elif name == "board_tilt":
             b = np.deg2rad(params["mag"])
             u = W * np.cos(b)
             c[:, :, 0] = (-1.0 if kind == "reverse" else 1.0) * W * np.sin(b)

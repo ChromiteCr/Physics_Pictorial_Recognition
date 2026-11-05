@@ -188,3 +188,25 @@ def test_dataset_roundtrip():
     ds2 = Dataset.from_dict(ds.to_dict())
     assert ds2.observations == ds.observations
     assert ds.truth["nuisance"]["mu_pull"] == ds.truth["linear"]["mu"]
+    # 无噪声模拟严格等于 F = μW/(cos α + μ sin α)
+    fine = Friction(scale_division=1e-9)
+    ds = fine.simulate(np.random.default_rng(9), "friction.pull_angle", magnitude=30.0, linear={"mu": 0.45},
+                       noise_scale=1e-9)
+    a = np.radians(30.0)
+    for o in ds.observations:
+        assert o.values[0] == pytest.approx(0.45 * o.setting / (np.cos(a) + 0.45 * np.sin(a)), rel=1e-6)
+
+
+def test_pull_angle_mu_is_consistent_for_twin_and_engine():
+    """模拟时分母里的 μ 与线性参数 μ 同步（正向物理精确）；引擎估出的线性 μ 是真 μ。
+    孪生直接调 predict，分母 μ 要显式给出（mu_pull），否则按先验 0.30 取值。"""
+    from lab_detective import twin
+    exact = 0.4 * 4.0 / (np.cos(np.radians(20.0)) + 0.4 * np.sin(np.radians(20.0)))
+    r = twin.expected_readings(EXP, "friction.pull_angle", {"mu": 0.4, "mu_pull": 0.4, "mag": 20.0},
+                               (("main", 4.0),))
+    assert r[0]["readings"][0]["mean"] == pytest.approx(exact)
+    rng = np.random.default_rng(10)
+    ds = EXP.simulate(rng, "friction.pull_angle", magnitude=20.0, linear={"mu": 0.4})
+    ds = EXP.extend(rng, ds, EXP.protocols["fixed_scale"].plan)
+    cp = posterior(EXP, ds).per_cause[EXP.cause_ids().index("friction.pull_angle")]
+    assert cp.map_linear(EXP)["mu"] == pytest.approx(0.4, abs=0.02)
