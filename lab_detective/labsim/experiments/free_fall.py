@@ -141,7 +141,8 @@ class FreeFall(Experiment):
         ),
         # 推导：光束被球的下沿挡住时停止计时，真正的下落距离 = 释放时下沿到光束。
         #   从球顶（电磁铁下表面）量起多记一个直径 D，从球心量起多记 D/2：h_记 = h + e。
-        #   t = β√(h_记 − e)：低处时间偏小得多，高处偏小得少，整体看起来"g 偏大"。
+        #   t = β√(h_记 − e)：低处时间偏小得多，高处偏小得少。逐行算 2h/t² 偏大；
+        #   但 t–√h 图的斜率偏大，g = 2/斜率² 反而偏小（截距为负）。
         Cause(
             TOP, "高度从小球顶端量起", "height measured from the top of the ball",
             "量高度时从电磁铁下表面（也就是小球顶端）或球心量到光电门，"
@@ -185,14 +186,15 @@ class FreeFall(Experiment):
             fix_zh="换用实心小钢球（密度大、体积小）。",
             fix_en="Use a small solid steel ball.",
         ),
-        # 推导：每次挪动光电门后读位置有 ±σ_h 的误差（视差、门没拧紧下滑），
+        # 推导：每次挪动光电门后读位置有 ±σ_h 的零均值误差（视线高低不一；门下滑只会单向偏，不算这里），
         #   时间误差 δt = δh/v，v = √(2gh)；用高度中点处的速度近似成常数：σ_t' = σ_h / v_mid。
+        #   重量高度（height_check）时门要重新放回，差值 ~ N(0, σ_h)。
         Cause(
             SCATTER, "光电门位置每次都读得不准", "photogate position misread each time",
-            "每次移动光电门以后，读它在立柱上的位置时眼睛高低不一，或者螺丝没拧紧、门稍微滑下来一点，"
+            "每次移动光电门以后，读它在立柱上的位置时眼睛高低不一，"
             "每个高度都有大小、方向不同的误差。",
-            "Each time the photogate is moved, its position is read from a different eye height, or "
-            "the clamp slips a little, so every height carries its own error.",
+            "Each time the photogate is moved, its position is read from a different eye height, "
+            "so every height carries its own error.",
             "scatter", ("scatter_excess",),
             magnitude=Prior.uniform(0.2, 1.5, 66),
             magnitude_label_zh="高度读数的额外误差", magnitude_unit="cm",
@@ -291,6 +293,9 @@ class FreeFall(Experiment):
         if kind == "main" and cause_id == SCATTER:
             extra = params["mag"][:, :, None] / 100.0 / V_MID
             return np.sqrt(base**2 + extra**2)
+        if kind == "height_check" and cause_id == SCATTER:
+            # 重量 60 cm 这组要把光电门挪回去，又按老习惯读错一次：差值 ~ N(0, σ_h)，单位都是 cm
+            return np.sqrt(base**2 + params["mag"][:, :, None] ** 2)
         return base
 
     def linearise(self, ds: Dataset) -> LinearData:

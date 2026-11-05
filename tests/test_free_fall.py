@@ -112,6 +112,34 @@ def test_height_check_separates_small_gate_mark_from_random():
     assert np.mean(after) > 0.9
 
 
+def test_gate_scatter_height_check_sigma_in_cm():
+    """光电门位置读数散布：重量高度时门要重新放回、又读错一次，差值的标准差 = σ_h（cm，不换算成时间）。"""
+    params = {"mag": np.array([[1.0]])}
+    sd = FreeFall().reading_sigma("height_check", params, "free_fall.gate_scatter")
+    assert np.ravel(sd)[0] == pytest.approx(math.sqrt(0.05**2 + 1.0**2))
+    sd0 = FreeFall().reading_sigma("height_check", params, "free_fall.random_only")
+    assert np.ravel(sd0)[0] == pytest.approx(0.05)
+
+
+def test_gate_scatter_survives_realistic_height_check():
+    """回归：真值是"光电门位置每次都读得不准"时，学生重量 60 cm 这组得到的差值是 N(0, σ_h)（手工注入，
+    不用 extend，免得模拟器和引擎同错同对）。修正前这一步会把约四成诊断推向"量错起点/读在门框上沿"。"""
+    from lab_detective.labsim import Observation
+
+    rng = np.random.default_rng(12)
+    before, after, top = [], [], 0
+    for _ in range(20):
+        ds = EXP.simulate(rng, "free_fall.gate_scatter", magnitude=1.0)
+        before.append(posterior(EXP, ds).prob("free_fall.gate_scatter"))
+        diff = round(rng.normal(0.0, 1.0) + rng.normal(0.0, 0.05), 1)
+        hc = Observation("height_check", 60.0, (diff,))
+        post = posterior(EXP, Dataset(ds.experiment_id, ds.observations + [hc], ds.truth, ds.meta))
+        after.append(post.prob("free_fall.gate_scatter"))
+        top += post.top() == "free_fall.gate_scatter"
+    assert top >= 17
+    assert np.mean(after) > np.mean(before) - 0.1
+
+
 def test_paper_shim_removes_delay_only_for_magnet_cause():
     rng = np.random.default_rng(6)
     before, after = [], []
