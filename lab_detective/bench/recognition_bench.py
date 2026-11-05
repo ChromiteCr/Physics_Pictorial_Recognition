@@ -1,6 +1,6 @@
 """识别 bench（照片）：按拍摄时段切分、生成测试集、给预测打分、规则基线。
 
-    python -m lab_detective.bench.recognition_bench split  [--gap-s 1800|auto] [--seed 0] [--src 旧 data 目录]
+    python -m lab_detective.bench.recognition_bench split  [--gap-s 1800|auto] [--seed 0] [--src 原图根目录]
     python -m lab_detective.bench.recognition_bench build  [--review review.json]
     python -m lab_detective.bench.recognition_bench score  --pred 预测.jsonl [--out report.json]
     python -m lab_detective.bench.recognition_bench rules
@@ -10,7 +10,7 @@
 
 数据流
 ------
-1. ``split``：照片 → 拍摄时间（EXIF 拍摄时间，读旧项目原图；回退到文件名里的时间戳，再回退到编号相邻）
+1. ``split``：照片 → 拍摄时间（EXIF 拍摄时间，读 datasets/ 下的原图；回退到文件名里的时间戳，再回退到编号相邻）
    → 相邻照片间隔 ≤ gap_s 算同一时段 → 约 25% 的时段整段划入测试集（按"首张照片 id 的哈希"排序取前 k 个，
    与随机数顺序无关，新增照片不会打乱已有时段的归属）。写 ``results/bench/recognition/split.json``。
    gap_s 默认 1800（30 分钟）。**真实的 200 张照片全部拍于 29 分钟之内，30 分钟间隔只得到 1 个时段**，
@@ -152,7 +152,7 @@ def photo_time(row: dict, src_root: str | Path | None = None, image_root: str | 
                ) -> tuple[datetime | None, str]:
     """一张照片的拍摄时间和来源标记。
 
-    优先级：manifest 里的 taken_at → 旧项目原图 EXIF（src_root/orig_path）→ 已转存图片的 EXIF
+    优先级：manifest 里的 taken_at → 原图 EXIF（src_root/orig_path）→ 已转存图片的 EXIF
     （build_dataset 写出的图不带 EXIF，通常读不到）→ 文件名时间戳。都没有返回 (None, "none")。
     """
     t = parse_exif_datetime(row.get("taken_at"))
@@ -897,7 +897,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--test-frac", type=float, default=TEST_FRAC)
     s.add_argument("--min-sessions", type=int, default=MIN_SESSIONS)
-    s.add_argument("--src", type=Path, default=SRC_DEFAULT, help="旧项目 data 目录（只读，用来读原图 EXIF）")
+    s.add_argument("--src", type=Path, default=SRC_DEFAULT, help="原图根目录（默认 datasets/，用来读原图 EXIF）")
     s.add_argument("--force", action="store_true", help="覆盖已有 split.json")
     s.set_defaults(fn=_cmd_split)
     b = sub.add_parser("build", help="生成 test.jsonl（需要 split.json；会跑 YOLO）")
