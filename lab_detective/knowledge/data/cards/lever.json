@@ -1,0 +1,67 @@
+{
+  "id": "lever",
+  "name_zh": "探究杠杆的平衡条件",
+  "name_en": "Lever balance condition",
+  "grade": "初中",
+  "goal": "探究杠杆在水平位置平衡时，动力、动力臂与阻力、阻力臂之间的关系。",
+  "principle": "杠杆静止平衡时，使它向两个方向转动的作用相互抵消：动力 × 动力臂 = 阻力 × 阻力臂。力臂是支点（转轴中心）到力的作用线的距离，力竖直时就是支点到挂点的距离。实验前调节平衡螺母使杠杆在水平位置平衡，是为了消除杠杆自重的影响，并让力臂能直接从杠杆刻度上读出。保持阻力 F2 和阻力臂 L2 不变，改变动力臂 L1，测力计示数 F1 与 1/L1 成正比，F1–1/L1 图像是一条过原点的直线，斜率等于 F2·L2。",
+  "formula": "F1·L1 = F2·L2；F1 = F2·L2 / L1",
+  "variables": [
+    {"symbol": "L1", "name": "动力臂（转轴中心到测力计挂点的距离）", "unit": "cm", "role": "control"},
+    {"symbol": "F1", "name": "动力（弹簧测力计示数）", "unit": "N", "role": "measured"},
+    {"symbol": "F2", "name": "阻力（钩码的重力）", "unit": "N", "role": "control"},
+    {"symbol": "L2", "name": "阻力臂（转轴中心到钩码挂点的距离）", "unit": "cm", "role": "control"},
+    {"symbol": "F1L1", "name": "动力 × 动力臂", "unit": "N·m", "role": "derived"},
+    {"symbol": "F2L2", "name": "阻力 × 阻力臂", "unit": "N·m", "role": "derived"}
+  ],
+  "apparatus": [
+    "带刻度和平衡螺母的杠杆及支架",
+    "钩码一盒（每个 50 g）",
+    "弹簧测力计（量程 0~5 N，分度值 0.1 N 或 0.2 N）",
+    "刻度尺"
+  ],
+  "steps": [
+    "把杠杆装在支架上，不挂钩码，调节两端的平衡螺母，使杠杆在水平位置平衡。",
+    "弹簧测力计挂钩朝上竖直拿着（与实验时的使用方向相同），在不受拉力时把指针调到零刻度线。",
+    "在支点左侧 10 cm 处挂 4 个钩码，阻力 F2 = 4 × 0.05 kg × 9.8 N/kg = 1.96 N，L2 = 10 cm。",
+    "把测力计挂在支点右侧 5 cm 处，竖直向下拉，使杠杆在水平位置平衡，读出示数 F1，记下 L1。",
+    "依次把测力计移到 10、15、20、25 cm 处，重复上一步。",
+    "计算每组的 F1·L1 和 F2·L2，作 F1–1/L1 图像，与 F1 = F2·L2/L1 比较。"
+  ],
+  "data_table": {
+    "columns": ["次数", "动力臂 L1/cm", "动力 F1/N", "阻力臂 L2/cm", "阻力 F2/N", "F1·L1/(N·m)", "F2·L2/(N·m)"]
+  },
+  "safety": [
+    "钩码要挂牢，防止掉落砸到脚。",
+    "测力计的拉力不要超过量程（5 N）。",
+    "支架放稳，取下钩码时用手扶住杠杆，避免杠杆突然翻转打到手。"
+  ],
+  "common_causes": [
+    "lever.random_only",
+    "lever.unbalanced",
+    "lever.pivot_offset",
+    "lever.scale_angle",
+    "lever.pivot_friction",
+    "lever.scale_zero"
+  ],
+  "knowledge_points": [
+    "kp.lever_balance_condition",
+    "kp.moment_arm",
+    "kp.lever_self_weight",
+    "kp.spring_scale_zeroing",
+    "kp.static_friction",
+    "kp.inverse_relation_linearisation",
+    "kp.systematic_error",
+    "kp.random_error"
+  ],
+  "cause_kps": {
+    "lever.unbalanced": ["kp.lever_self_weight"],
+    "lever.pivot_offset": ["kp.moment_arm"],
+    "lever.scale_angle": ["kp.moment_arm"],
+    "lever.pivot_friction": ["kp.static_friction"],
+    "lever.scale_zero": ["kp.spring_scale_zeroing"]
+  },
+  "relation_family": "inverse",
+  "labsim_id": "lever",
+  "yolo_cues": ["dynamometer"]
+}
