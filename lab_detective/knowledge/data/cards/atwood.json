@@ -1,0 +1,79 @@
+{
+  "id": "atwood",
+  "name_zh": "阿特伍德机验证牛顿第二定律",
+  "name_en": "Atwood machine: Newton's second law",
+  "grade": "高中",
+  "goal": "用跨过定滑轮的两个重物（阿特伍德机）测量加速度，验证加速度与质量差成正比：a = (m1 − m2)g/(m1 + m2)。",
+  "principle": "两个重物 m1 > m2 用细线跨过定滑轮。对 m1：m1g − T = m1a；对 m2：T − m2g = m2a；滑轮轻且无摩擦时两侧拉力相等，得 a = (m1 − m2)g/(m1 + m2)。保持总质量 M = m1 + m2 不变，只把小槽码从一侧移到另一侧来改变质量差 Δm，则 a 与 Δm·g 成正比，比例系数是 1/M。重物从静止开始做匀加速运动，下落高度 h 和时间 t 满足 h = at²/2，所以 a = 2h/t²。因为加速度比 g 小得多，下落得慢，用秒表也能计时。",
+  "formula": "a = (m1 − m2)g/(m1 + m2)；h = at²/2 → a = 2h/t²",
+  "variables": [
+    {"symbol": "m1、m2", "name": "两侧重物的质量", "unit": "g", "role": "control"},
+    {"symbol": "Δm", "name": "两侧质量差 m1 − m2", "unit": "g", "role": "control"},
+    {"symbol": "M", "name": "两侧总质量 m1 + m2（保持不变）", "unit": "g", "role": "control"},
+    {"symbol": "h", "name": "较重物体下落的高度", "unit": "m", "role": "measured"},
+    {"symbol": "t", "name": "下落所用时间", "unit": "s", "role": "measured"},
+    {"symbol": "a", "name": "加速度", "unit": "m/s²", "role": "derived"}
+  ],
+  "apparatus": [
+    "带支架的定滑轮（尽量轻、转动灵活）",
+    "细线（尽量细、轻）",
+    "两个重物（钩码或槽码组，各约 300 g）和若干 5 g 小槽码",
+    "秒表（分度值 0.01 s）",
+    "卷尺（分度值 1 mm）",
+    "缓冲软垫",
+    "可选：电磁铁、光电门和数字计时器",
+    "可选：天平（称滑轮质量）"
+  ],
+  "steps": [
+    "把定滑轮固定在高处，细线跨过滑轮，两端各挂一个重物，使两侧总质量 M = 600 g 且相等，检查滑轮能否灵活转动。",
+    "把 5 g 小槽码从一侧移到另一侧，使质量差 Δm = 10 g（总质量不变）。",
+    "把较重的一侧拉到离地面 h 处（较轻的一侧落在地上），用卷尺从重物底面量到它落地的位置（缓冲垫上表面），记下 h。",
+    "由静止释放重物，同时开始计时，重物落地时停止计时；同一 Δm 测 4 次。",
+    "依次把 Δm 改为 20 g、30 g、40 g、50 g，每次总质量不变，重复上面两步。",
+    "用 a = 2h/t² 算出每次的加速度，以 Δm·g 为横轴、a 为纵轴作图，看是否是过原点的直线，并把斜率与 1/M 比较。"
+  ],
+  "data_table": {
+    "columns": ["序号", "质量差 Δm/g", "Δm·g/N", "下落高度 h/m", "时间 t/s", "加速度 a = 2h/t² /(m·s⁻²)"]
+  },
+  "safety": [
+    "重物落地处放软垫，释放前确认重物下方没有手脚。",
+    "滑轮支架要固定牢靠，挂重物前检查细线是否结实、绳结是否系紧。"
+  ],
+  "common_causes": [
+    "atwood.random_only",
+    "atwood.pulley_inertia",
+    "atwood.pulley_friction",
+    "atwood.string_mass",
+    "atwood.timing_offset",
+    "atwood.wrong_distance"
+  ],
+  "knowledge_points": [
+    "kp.newton_second_law",
+    "kp.connected_bodies",
+    "kp.pulley",
+    "kp.acceleration",
+    "kp.mass",
+    "kp.uniform_acceleration",
+    "kp.ideal_model",
+    "kp.control_variables",
+    "kp.reaction_time",
+    "kp.scale_reading",
+    "kp.multiple_measurements",
+    "kp.photogate",
+    "kp.graph_method",
+    "kp.graph_slope_intercept",
+    "kp.systematic_error",
+    "kp.random_error"
+  ],
+  "cause_kps": {
+    "atwood.random_only": ["kp.random_error", "kp.multiple_measurements", "kp.reaction_time"],
+    "atwood.pulley_inertia": ["kp.pulley", "kp.ideal_model", "kp.systematic_error"],
+    "atwood.pulley_friction": ["kp.pulley", "kp.kinetic_friction", "kp.graph_slope_intercept"],
+    "atwood.string_mass": ["kp.connected_bodies", "kp.ideal_model", "kp.gravity_weight"],
+    "atwood.timing_offset": ["kp.reaction_time", "kp.systematic_error", "kp.error_propagation"],
+    "atwood.wrong_distance": ["kp.scale_reading", "kp.uniform_acceleration", "kp.systematic_error"]
+  },
+  "relation_family": "proportional",
+  "labsim_id": "atwood",
+  "yolo_cues": ["string", "iron_block"]
+}

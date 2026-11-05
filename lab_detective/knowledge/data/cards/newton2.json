@@ -1,0 +1,84 @@
+{
+  "id": "newton2",
+  "name_zh": "探究加速度与力、质量的关系",
+  "name_en": "Acceleration vs force and mass (Newton's second law)",
+  "grade": "高中",
+  "goal": "保持小车质量不变，改变槽码质量，探究小车的加速度与所受拉力的定量关系；理解平衡摩擦力的作用和用槽码重力代替细线拉力的条件。",
+  "principle": "小车放在一端带定滑轮的长木板上，细线一端系小车、另一端跨过定滑轮挂小盘和槽码。先不挂小盘，把木板另一端垫高，使拖着纸带的小车能匀速运动，这时重力沿木板的分力恰好抵消摩擦力和纸带阻力（平衡摩擦力）。挂上槽码后，小车所受合力就等于细线拉力 T。对小车 Ma = T，对槽码 ma = mg − T，得 a = mg/(M + m)，T = mg·M/(M + m)；当 m 远小于 M 时 T ≈ mg，于是 a ≈ F/M（F = mg），a–F 图像是过原点、斜率为 1/M 的直线。加速度由纸带用逐差法求出：a = [(x4 + x5 + x6) − (x1 + x2 + x3)]/(9T²)。",
+  "formula": "a = F/M（F = mg，条件 m ≪ M）；精确：a = mg/(M + m)；逐差法 a = [(x4+x5+x6) − (x1+x2+x3)]/(9T²)",
+  "variables": [
+    {"symbol": "m", "name": "小盘和槽码的总质量", "unit": "g", "role": "control"},
+    {"symbol": "M", "name": "小车（含车上砝码）的质量", "unit": "kg", "role": "control"},
+    {"symbol": "F", "name": "拉力（用槽码重力 mg 代替）", "unit": "N", "role": "derived"},
+    {"symbol": "x₁…x₆", "name": "纸带上相邻计数点间的距离", "unit": "cm", "role": "measured"},
+    {"symbol": "T", "name": "相邻计数点的时间间隔", "unit": "s", "role": "control"},
+    {"symbol": "a", "name": "小车的加速度", "unit": "m/s²", "role": "derived"}
+  ],
+  "apparatus": [
+    "小车",
+    "一端带定滑轮的长木板",
+    "垫块（用来垫高木板）",
+    "细线",
+    "小盘和槽码（每个 10 g）",
+    "打点计时器、纸带、复写纸及电源",
+    "刻度尺（分度值 1 mm）",
+    "天平",
+    "可选：光电门、遮光条和数字计时器"
+  ],
+  "steps": [
+    "用天平称出小车（含车上砝码）的质量 M，记下来，整个实验中保持不变。",
+    "把长木板放在桌上，定滑轮伸出桌边；把打点计时器固定在木板另一端，纸带穿过限位孔连在小车后面。",
+    "调节定滑轮的高度，使系小车的细线与木板平行。",
+    "平衡摩擦力：先不挂小盘和槽码，在木板不带滑轮的一端下面垫上垫块，接通电源，轻推小车，反复调整垫块位置，直到纸带上的点迹间隔均匀（小车做匀速运动）。",
+    "细线跨过定滑轮挂上小盘和槽码，使总质量 m = 10 g；小车靠近打点计时器，先接通电源、再释放小车，小车到达滑轮前用手挡住，打好纸带后关闭电源。",
+    "保持 M 不变，依次把 m 改为 20 g、30 g、40 g、50 g，每次换一条纸带，重复上一步；注意 m 要远小于 M。",
+    "每条纸带上每 5 个点取一个计数点（T = 0.1 s），量出 6 段距离，用逐差法求加速度 a。",
+    "以 F = mg 为横轴、a 为纵轴描点作图，看图像是否是过原点的直线，并把斜率和 1/M 比较。"
+  ],
+  "data_table": {
+    "columns": ["序号", "小盘和槽码总质量 m/g", "拉力 F = mg/N", "加速度 a/(m·s⁻²)"]
+  },
+  "safety": [
+    "小车快到滑轮时要用手挡住，防止小车撞坏滑轮或从桌边掉下。",
+    "槽码下方地面可垫软垫，防止槽码落地砸脚或损坏。",
+    "打点计时器用完要及时断开电源。"
+  ],
+  "common_causes": [
+    "newton2.random_only",
+    "newton2.unbalanced",
+    "newton2.overbalanced",
+    "newton2.heavy_hanging",
+    "newton2.string_angle",
+    "newton2.pulley_drag"
+  ],
+  "knowledge_points": [
+    "kp.newton_second_law",
+    "kp.acceleration",
+    "kp.mass",
+    "kp.control_variables",
+    "kp.balancing_friction",
+    "kp.connected_bodies",
+    "kp.ideal_model",
+    "kp.force_composition",
+    "kp.pulley",
+    "kp.ticker_timer",
+    "kp.ticker_tape_analysis",
+    "kp.uniform_acceleration",
+    "kp.photogate",
+    "kp.graph_method",
+    "kp.graph_slope_intercept",
+    "kp.systematic_error",
+    "kp.random_error"
+  ],
+  "cause_kps": {
+    "newton2.random_only": ["kp.random_error", "kp.multiple_measurements", "kp.graph_method"],
+    "newton2.unbalanced": ["kp.balancing_friction", "kp.kinetic_friction", "kp.graph_slope_intercept"],
+    "newton2.overbalanced": ["kp.balancing_friction", "kp.incline_forces", "kp.graph_slope_intercept"],
+    "newton2.heavy_hanging": ["kp.connected_bodies", "kp.ideal_model", "kp.systematic_error"],
+    "newton2.string_angle": ["kp.force_composition", "kp.systematic_error"],
+    "newton2.pulley_drag": ["kp.pulley", "kp.ideal_model", "kp.balancing_friction"]
+  },
+  "relation_family": "proportional",
+  "labsim_id": "newton2",
+  "yolo_cues": ["cart", "track", "string"]
+}
