@@ -137,3 +137,30 @@ def test_card_matches_module():
     assert set(card["yolo_cues"]) <= {"cart", "track", "string", "dynamometer", "wooden_block",
                                       "iron_block", "spring"}
     assert all(k.startswith("kp.") for k in card["knowledge_points"])
+
+
+# ── 复核补充的回归测试 ──────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("p,secondary", [(1.0, "intercept_pos"), (-1.2, "curve_up")])
+def test_pivot_offset_secondary_signatures_are_declared(p, secondary):
+    """F1 = F2(L2 − p)/(L1 + p) 在 F1–1/L1 图上除斜率外还常带截距（p > 0）或上弯（p < 0），
+    这正是它和"没调平""斜拉"（只改斜率）的区别，事实单要能引用。"""
+    assert secondary in EXP.cause("lever.pivot_offset").signatures
+    rng = np.random.default_rng(14)
+    hits = sum(secondary in compute_panel(EXP.linearise(EXP.simulate(rng, "lever.pivot_offset", magnitude=p))).signatures
+               for _ in range(30))
+    assert hits >= 15
+
+
+def test_arm_check_is_on_the_scale_side():
+    """参考点偏向测力计一侧 p 时，测力计一侧的实际力臂比记录值长 p，钩码一侧短 p；菜单必须指明是哪一侧。"""
+    assert "测力计一侧" in EXP.menu_item("arm_check").label_zh
+    assert "测力计一侧" in EXP.obs_kinds["arm"].label_zh
+    c, _ = EXP.predict("arm", np.array([15.0]), np.array([0]), {"mag": np.array([[0.8]])}, "lever.pivot_offset")
+    assert np.ravel(c)[0] == pytest.approx(0.8)
+
+
+def test_card_states_arm_condition():
+    card = json.loads(CARD.read_text(encoding="utf-8"))
+    assert "杠杆水平、力竖直时" in card["principle"]

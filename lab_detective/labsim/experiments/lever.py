@@ -67,8 +67,8 @@ def _obs_kinds(division: float) -> dict[str, ObsKind]:
                      resolution=1.0, sigma=2.0),),
         ),
         "arm": ObsKind(
-            "arm", "用刻度尺从转轴中心量到 15 cm 孔，与记录的力臂比较",
-            "measure from the axle centre to the 15 cm hole",
+            "arm", "用刻度尺从转轴中心量到右侧（测力计一侧）15 cm 孔，与记录的力臂比较",
+            "measure from the axle centre to the 15 cm hole on the scale side",
             (Reading("arm_diff", "实际距离 − 记录的力臂", "true − recorded arm", "cm",
                      resolution=0.1, sigma=0.1),),
         ),
@@ -132,7 +132,8 @@ class Lever(Experiment):
             "两侧的力臂都是从同一个错误的点量起的。",
             "The arms were measured from a point that is not the axle centre (ruler zero at the edge of "
             "the support, or the axle not at the lever's printed zero), the same wrong point for both sides.",
-            "x_offset", ("slope_low", "slope_high"),
+            # 次要特征（200 次按先验抽样）：p > 0 时约 60% 截距为正，p < 0 时约 70% 向上弯
+            "x_offset", ("slope_low", "slope_high", "intercept_pos", "curve_up"),
             magnitude=Prior.sym_uniform(0.3, 1.5, 40),
             magnitude_label_zh="起点相对转轴的偏移（偏向测力计一侧为正）", magnitude_unit="cm",
             fix_zh="力臂一律从转轴中心量到力的作用线（挂点）；用杠杆刻度时先确认零刻度正对转轴。",
@@ -199,7 +200,8 @@ class Lever(Experiment):
                  "move the load to 20 cm and read at L1 = 10, 20 cm", 3.0,
                  (("main_far", 10.0), ("main_far", 20.0))),
         MenuItem("angle_check", "量一下测力计与竖直方向的夹角", "measure the scale's tilt", 1.0, (("angle", 0.0),)),
-        MenuItem("arm_check", "用刻度尺从转轴中心量到 15 cm 孔", "measure the arm from the axle centre",
+        MenuItem("arm_check", "用刻度尺从转轴中心量到右侧（测力计一侧）15 cm 孔",
+                 "measure the scale-side arm from the axle centre",
                  2.0, (("arm", 15.0),)),
         MenuItem("zero_check", "按使用方向拿着测力计，检查零点", "check the scale zero as used", 1.0, (("zero", 0.0),)),
         MenuItem("two_way", "在 10 cm 处从两个方向拉到水平，读两次之差",

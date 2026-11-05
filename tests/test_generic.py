@@ -246,3 +246,69 @@ def test_no_wording_overlap_with_named_experiments():
         for c in exp.causes:
             assert not (_ngrams(c.description_zh, 8) | _ngrams(c.fix_zh, 8)) & zh_ref, c.id
             assert not (_word_ngrams(c.description_en, 6) | _word_ngrams(c.fix_en, 6)) & en_ref, c.id
+
+
+# ── 复核补充的回归测试 ──────────────────────────────────────────────────
+
+STRING = {"id": "strg", "name": "弦振动频率与弦长", "x_var": {"name": "弦长", "symbol": "L", "tool": "刻度尺"},
+          "y_var": {"name": "频率", "symbol": "f", "tool": "频率计"}, "units": {"x": "cm", "y": "Hz"},
+          "resolutions": {"x": 0.1, "y": 1.0}, "sigma": {"y": 1.0}, "relation_family": "inverse",
+          "ideal_slope": None, "slope_guess": 15000.0, "x_range": [30.0, 75.0], "n_points": 7}
+
+
+@pytest.mark.parametrize("spec,word", [(STRING, "小"), (OHM, "大"), (PEND, "大")])
+def test_bend_wording_matches_where_the_bend_is(spec, word):
+    """弯曲项 ∝ X² = x^(2q)：q > 0 时在大 x 一端，q < 0（反比、平方反比）时在小 x 一端，名称和描述要一致。"""
+    exp = GenericExperiment(spec)
+    cid = f"{exp.id}.bend"
+    c, U = exp.predict("main", exp.xs, np.arange(exp.xs.size, dtype=float), {"mag": np.zeros((1, 1))}, cid)
+    col = np.abs(U[0, :, 0, exp._idx(cid, "bend")])
+    at_small_x = exp.xs[int(np.argmax(col))] == exp.xs.min()
+    assert at_small_x == (exp.q < 0)
+    cause = exp.cause(cid)
+    assert cause.name_zh.startswith(word)
+    assert f"{exp.xv['name']}越{word}" in cause.description_zh or f"{exp.xv['name']}{word}时" in cause.description_zh \
+        or f"{exp.xv['name']}较{word}" in cause.description_zh or f"{exp.xv['name']}很{word}" in cause.description_zh
+
+
+def test_procedural_inverse_laws_say_small_x_for_bend():
+    for exp, _ in procedural_task_family(np.random.default_rng(15), 150):
+        cid = f"{exp.id}.bend"
+        if cid in exp.cause_ids():
+            assert exp.cause(cid).name_zh.startswith("小" if exp.q < 0 else "大"), exp.id
+
+
+def test_x_zero_check_separates_bend_from_x_offset_on_inverse_law():
+    """反比关系里 x 起点偏差的效应 ∂[a/(x+δ)]/∂δ = −a·X²，和弯曲项 a·X²/X_max 共线，标准数据分不开；
+    重新核对 x 的起点（弯曲时读数为 0）就能分开。"""
+    exp = GenericExperiment(STRING)
+    rng = np.random.default_rng(16)
+    before, after = [], []
+    for _ in range(20):
+        ds = exp.simulate(rng, "strg.bend", **_large(exp, "strg.bend", 1))
+        before.append(posterior(exp, ds).prob("strg.bend"))
+        ds2 = exp.extend(rng, ds, exp.menu_item("x_zero_check").plan)
+        after.append(posterior(exp, ds2).prob("strg.bend"))
+    assert np.mean(after) > np.mean(before) + 0.3
+
+
+def test_directional_hint_never_flips_the_simulated_fault():
+    """提示写明了方向（杂散光只会让照度变大、近处只会偏小），模拟出的故障不能反号；显式指定的值不改。"""
+    spec = dict(STRING, id="ill", relation_family="power", exponent=-2.0, slope_guess=1e6, x_range=[25.0, 80.0],
+                resolutions={"x": 0.5, "y": 1.0}, sigma={"y": 2.0},
+                hints={"y_offset": ("房间里有杂散光，每个读数都多了一份。", 1),
+                       "bend": ("近处灯不能看成点光源，照度偏小。", -1)})
+    exp = GenericExperiment(spec)
+    rng = np.random.default_rng(17)
+    assert all(exp.draw_truth(rng, "ill.y_offset")["linear"]["y_shift"] >= 0 for _ in range(500))
+    assert all(exp.draw_truth(rng, "ill.bend")["linear"]["bend"] <= 0 for _ in range(500))
+    assert exp.draw_truth(rng, "ill.y_offset", linear={"y_shift": -3.0})["linear"]["y_shift"] == -3.0
+
+
+def test_scale_error_also_scales_a_known_intercept():
+    """仪器比例不准：读数 = (1 + r)(a·X + b)，已知截距 b ≠ 0 时 r·b 不能丢。"""
+    exp = GenericExperiment({"id": "kb", "relation_family": "linear", "ideal_slope": 2.0, "ideal_intercept": 5.0,
+                             "x_range": [1.0, 6.0], "resolutions": {"x": 0.1, "y": 0.01}})
+    cid = "kb.scale"
+    _, U = exp.predict("main", np.array([1.0, 6.0]), np.arange(2.0), {"mag": np.zeros((1, 1))}, cid)
+    assert U[0, :, 0, exp._idx(cid, "scale_ratio")] == pytest.approx([2.0 * 1 + 5.0, 2.0 * 6 + 5.0])

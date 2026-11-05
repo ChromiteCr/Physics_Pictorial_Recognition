@@ -9,7 +9,7 @@ GenericExperiment 由一份类似实验卡的说明（spec）构造，不需要�
 
 通用原因（描述按变量名和仪器名模板生成，只写物理过程）：
   random_only、x_offset（x 的起点/零点错了，网格参数）、y_offset（y 仪器没归零，线性参数）、
-  scale（y 仪器比例不准，线性参数；只在斜率已知时可辨识）、bend（大 x 时偏离理想规律，线性参数）、
+  scale（y 仪器比例不准，线性参数；只在斜率已知时可辨识）、bend（X = x^q 大的一端偏离理想规律：q>0 在大 x，q<0 在小 x；线性参数）、
   scatter（读数散布偏大，网格参数）、drift（条件随测量顺序漂移，线性参数）。
   标准方案下数据分不出来的原因（例如截距未知时 y_offset）直接不列入，并记在 ``omitted`` 里。
 
@@ -117,6 +117,18 @@ _TEMPLATES: dict[str, tuple] = {
         "只在近似成立的范围内取数据，或者缩小{x}的取值范围后重新测量。",
         "Keep to the range where the approximation holds, or narrow the range of {x} and remeasure.",
     ),
+    # q < 0（反比、平方反比）时横轴 X = x^q 最大处对应最小的 x，弯曲出现在小 x 一端
+    "bend_small": (
+        "小{x}时偏离理想规律", "law breaks down at small {x}",
+        ["{x}取得较小时，理想规律所依赖的近似条件不再成立，{y}偏离理想关系，而且{x}越小偏得越快。",
+         "器材在{x}很小时超出了正常工作范围，出现了理想规律没有考虑的效应，偏差随{x}减小而迅速变大。",
+         "某个在{x}大时可以忽略的因素，在{x}小时变得重要起来，使{y}与理想关系的偏差越来越大。"],
+        ["At small {x} the approximation behind the ideal law no longer holds, and {y} departs from it "
+         "faster and faster as {x} shrinks.",
+         "At small {x} the apparatus leaves its normal working range, and an effect the ideal law ignores grows quickly."],
+        "只在近似成立的范围内取数据，或者缩小{x}的取值范围后重新测量。",
+        "Keep to the range where the approximation holds, or narrow the range of {x} and remeasure.",
+    ),
     "scatter": (
         "{y}读数忽高忽低", "{y} readings unsteady",
         ["每次读{y}时操作都不一致：读数时机、视线角度或者装置是否稳定都在变，读数忽高忽低。",
@@ -130,11 +142,12 @@ _TEMPLATES: dict[str, tuple] = {
     "drift": (
         "条件随时间漂移", "conditions drift during the run",
         ["实验过程中条件在慢慢变化（例如器材发热、电源电压逐渐下降），越往后测的{y}偏得越多。",
-         "{yt}在使用过程中逐渐走偏，同样的输入，后测的读数和先测的不一样，偏差随测量顺序累积。",
+         "被测装置本身在实验过程中逐渐改变，同样的{x}，后测的{y}和先测的不一样，偏差随测量顺序累积。",
          "环境（温度、湿度等）在实验过程中缓慢改变，{y}随时间一点点偏离，与{x}取多大无关。"],
         ["Conditions change slowly during the run (apparatus warming up, supply voltage sagging), so later "
          "{y} readings are shifted more.",
-         "The {yt} slowly creeps while in use; the same input reads differently later, accumulating with order."],
+         "The apparatus itself slowly changes during the run; the same {x} gives a different {y} later, "
+         "accumulating with order."],
         "缩短实验时间、让器材预热后再测；打乱{x}的测量顺序，最后重测第一组看是否回到原值。",
         "Warm the apparatus up first, shorten the run, shuffle the order and re-measure the first setting at the end.",
     ),
@@ -346,13 +359,14 @@ class GenericExperiment(Experiment):
                 lin = (LinearParam("y_shift", 0.0, sd, "零点偏差", self.yv["unit"]),)
                 big = large_lin(np.ones_like(X), sd)
             elif key == "scale":
-                sd = lin_sd(a * X) if self.ideal_slope is not None else None
+                u_sc = a * X + self._b_known()  # 读数整体乘 (1+r)：已知截距也跟着变
+                sd = lin_sd(u_sc) if self.ideal_slope is not None else None
                 if sd is None:
                     self.omitted[key] = "斜率未知时，比例误差被斜率完全吸收"
                     continue
                 sd = max(sd, 3 * SLOPE_REL_SD_KNOWN)
                 lin = (LinearParam("scale_ratio", 0.0, sd, "比例偏差", ""),)
-                big = large_lin(a * X, sd)
+                big = large_lin(u_sc, sd)
             elif key == "bend":
                 sd = lin_sd(a * X**2 / self.X_max)
                 if sd is None:
@@ -377,7 +391,8 @@ class GenericExperiment(Experiment):
             self.fault_signs[cid] = (1, -1) if sign == 0 or key == "scatter" else (sign,)
             if key == "scatter":
                 self.fault_signs[cid] = (1,)
-            name_zh, name_en, dz, de, fz, fe = _TEMPLATES[key]
+            tkey = "bend_small" if key == "bend" and self.q < 0 else key
+            name_zh, name_en, dz, de, fz, fe = _TEMPLATES[tkey]
             if key in variants:
                 vz = vez = int(variants[key])
             elif rng is not None:
@@ -468,6 +483,22 @@ class GenericExperiment(Experiment):
     def _idx(self, cause_id: str, name: str) -> int:
         return [p.name for p in self.linear_params(cause_id)].index(name)
 
+    def _b_known(self) -> float:
+        """已知截距（未知时 0：比例误差里截距那部分被截距参数吸收）。"""
+        return self.b_nom if self.ideal_intercept is not None else 0.0
+
+    def draw_truth(self, rng, cause_id, magnitude=None, nuisance=None, linear=None):
+        """带方向的物理提示：模拟时故障线性参数取提示的那一侧（先验均值 ±1.5σ 仍有约 7% 抽到反号）。
+        显式给出的 linear 不改。"""
+        truth = super().draw_truth(rng, cause_id, magnitude, nuisance, linear)
+        cause = self.cause(cause_id)
+        signs = self.fault_signs.get(cause_id, ())
+        if cause.linear and len(signs) == 1 and self.suffix(cause_id) != "scatter":
+            name = cause.linear[0].name
+            if not (linear and name in linear):
+                truth["linear"][name] = signs[0] * abs(truth["linear"][name])
+        return truth
+
     def predict(self, kind, settings, order, params, cause_id):
         P = params["mag"].shape[0]
         n = settings.size
@@ -488,7 +519,8 @@ class GenericExperiment(Experiment):
             if key == "y_offset":
                 U[:, :, 0, self._idx(cause_id, "y_shift")] = 1.0
             elif key == "scale":
-                U[:, :, 0, self._idx(cause_id, "scale_ratio")] = self.slope_nom * X  # y·(1+r) ≈ y + r·a·X
+                # y·(1+r) ≈ y + r·(a·X + b)；截距未知时 r·b 被截距参数吸收，只留 a·X
+                U[:, :, 0, self._idx(cause_id, "scale_ratio")] = self.slope_nom * X + self._b_known()
             elif key == "bend":
                 U[:, :, 0, self._idx(cause_id, "bend")] = self.slope_nom * X**2 / self.X_max
             elif key == "drift":
