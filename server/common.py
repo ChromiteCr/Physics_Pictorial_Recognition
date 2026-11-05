@@ -11,7 +11,8 @@
    这样训练时的前缀和推理时逐字节一致；前面的助手回合只当上下文。
 2. 关闭思考：渲染出的 prompt 必须以空思考块 "<think>\\n\\n</think>\\n\\n" 结尾，否则报错
    （处理器会把模板不认识的参数悄悄当作别的参数，只给一条警告）。
-3. 超长样本直接丢弃，不截断（截断会切坏图像 token，和像素特征对不上）。
+3. 超长样本直接丢弃，不截断（截断会切坏图像 token，和像素特征对不上）；正式训练时有超长样本就拒绝开训
+   （train_sft.py --allow-truncation 才放行），免得目标最长的诊断样本被悄悄丢掉。
 4. 数据顺序只由 (seed, epoch, id) 决定，与内容无关：S1 和打乱标签对照看到的批次完全相同。
 
 本文件顶层不导入 torch / transformers / PIL（本机 CPU 测试只测纯 Python 逻辑）。
@@ -185,6 +186,23 @@ def image_refs(messages: Sequence[dict]) -> list[str]:
     """按出现顺序列出图片的相对路径。"""
     return [p["image"] for m in messages for p in normalize_parts(m.get("content"))
             if p["type"] == "image"]
+
+
+def unmarked_image_hits(records: Sequence[dict], root: str | Path | None) -> list[str]:
+    """识别 bench 的图应是带编号框的版本；meta.image_sha1 记的是没画框的原图。
+    解析出来的图片字节和 image_sha1 一样，说明打包时拿错了原图（提示里说有编号框，图上却没有）。返回撞上的 id。"""
+    hits = []
+    for rec in records:
+        meta = meta_of(rec)
+        sha1 = meta.get("image_sha1")
+        if not sha1 or meta.get("legend") is None:
+            continue
+        for ref in image_refs(rec["messages"]):
+            p = resolve_image(ref, root)
+            if p.is_file() and hashlib.sha1(p.read_bytes()).hexdigest() == sha1:
+                hits.append(rec["id"])
+                break
+    return hits
 
 
 def load_pil(path: str | Path):
@@ -525,8 +543,10 @@ def shuffle_cause_labels(rec: dict, seed: int, fallback_domain: Sequence[str] | 
     new = copy.deepcopy(rec)
     new["messages"][-1] = {"role": "assistant", "content": new_target}
     new.setdefault("meta", {})["label_shuffle"] = {"seed": seed, "how": how, "perm": perm}
-    old_ids = target_cause_ids(target) or _first_id(target, ids)
-    new_ids = target_cause_ids(new_target) or _first_id(new_target, ids)
+    # 目标里没有 cause_id 时（"自己提出原因"变体只写中文名）按第一个出现的 id，再按第一个出现的名称判断第一名
+    named = [n for n in names if n and len(n) >= 2] if all(n is not None for n in names) else []
+    old_ids = target_cause_ids(target) or _first_id(target, ids) or _first_id(target, named)
+    new_ids = target_cause_ids(new_target) or _first_id(new_target, ids) or _first_id(new_target, named)
     top_changed = bool(old_ids and new_ids and old_ids[0] != new_ids[0])
     return new, {"how": how, "changed": new_target != target, "top_changed": top_changed}
 
@@ -654,11 +674,12 @@ def make_synthetic(out_dir: str | Path, n: int = 24, n_bench: int = 4, seed: int
                                   {"role": "user", "content": [{"type": "text", "text": user}]},
                                   {"role": "assistant", "content": json.dumps(target, ensure_ascii=False)}],
                      "meta": {"experiment_id": "hooke", "split": "train", "seed": seed + i, "causes": causes}})
+    bench_ids = {r["id"] for r in recs[n:n + n_bench]}
     if with_images:
         from PIL import Image, ImageDraw
 
         (out / "images").mkdir(exist_ok=True)
-        for i in range(4):
+        for i in range(5):  # 前 4 张进训练，最后 1 张进 bench（冒烟评测也要走一遍带图的生成）
             im = Image.new("RGB", (320, 240), (240, 240, 235))
             d = ImageDraw.Draw(im)
             d.line([(160, 20), (160, 140)], fill=(60, 60, 60), width=3)
@@ -672,8 +693,9 @@ def make_synthetic(out_dir: str | Path, n: int = 24, n_bench: int = 4, seed: int
                                       {"role": "assistant", "content": json.dumps(
                                           {"letter": "C", "experiment_id": "hooke"}, ensure_ascii=False)}],
                          "meta": {"experiment_id": "hooke", "split": "train", "seed": i}})
-    bench_ids = {r["id"] for r in recs[n:n + n_bench]}
-    train = [r for r in recs if r["id"] not in bench_ids]
+            if i == 4:
+                bench_ids.add(recs[-1]["id"])
+    train =[r for r in recs if r["id"] not in bench_ids]
     bench = [r for r in recs if r["id"] in bench_ids]
     write_jsonl(out / "train.jsonl", train)
     write_jsonl(out / "bench.jsonl", bench)

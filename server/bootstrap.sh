@@ -12,7 +12,9 @@
 #   VLLM_SPEC=vllm                          例如 "vllm==0.x.y"
 #   MODELS="Qwen/Qwen3.5-4B Qwen/Qwen3.5-0.8B"
 #   HF_MIRROR=https://hf-mirror.com         ModelScope 失败时 HF 兜底用的端点（空 = 官方）
+#   TORCH_SRC=auto|official|aliyun          torch 轮子从哪下（auto = 官方 cu128 源通就用官方，否则阿里镜像）
 #   SKIP_FASTPATH=1                         不装 flash-linear-attention / causal-conv1d
+#   WITH_CAUSAL_CONV1D=0                    不装 causal-conv1d（多半要现场编译，≤ 30 分钟，收益小；fla 才是大头）
 #   SKIP_VLLM=1                             不建服务环境（评测改用 HF 后端）
 set -uo pipefail
 
@@ -87,7 +89,7 @@ if has_step net; then
   [[ "$MIRROR" != auto ]] || die "所有 PyPI 源都连不上"
   PIP_INDEX=${IDX[$MIRROR]}
   TORCH_MODE=index; TORCH_URL=https://download.pytorch.org/whl/$TORCH_CUDA
-  if ! probe torch-official "$TORCH_URL/torch/"; then
+  if [[ "${TORCH_SRC:-auto}" == aliyun ]] || { [[ "${TORCH_SRC:-auto}" == auto ]] && ! probe torch-official "$TORCH_URL/torch/"; }; then
     TORCH_MODE=findlinks; TORCH_URL=https://mirrors.aliyun.com/pytorch-wheels/$TORCH_CUDA/
     probe torch-aliyun "$TORCH_URL" || warn "两个 PyTorch 源都不通，torch 只能从 PyPI 镜像装（再核对 CUDA 版本）"
   fi
@@ -136,14 +138,40 @@ print("  torch", torch.__version__, "CUDA", torch.version.cuda, "arch", torch.cu
 major, minor = map(int, (torch.version.cuda or "0.0").split(".")[:2])
 assert (major, minor) >= (12, 8), torch.version.cuda
 assert any(a.endswith("_120") for a in torch.cuda.get_arch_list()), "没有 sm_120 内核"
+# 驱动太老（比如 torch 是 cu130、驱动只到 12.8）时 is_available 为 False：现在就停，别等到 GPU 检查
+assert torch.cuda.is_available(), "torch 用不了 GPU：多半是 torch 的 CUDA 版本高于驱动，设 TORCH_SPEC 固定一个 cu128 版本"
+x = torch.ones(256, 256, device="cuda", dtype=torch.bfloat16)
+assert float((x @ x).float().mean()) == 256.0
+print("  GPU", torch.cuda.get_device_name(0), "可用")
 EOF
-  pipi "$T" -c "$WORK/envs/train_torch_constraints.txt" "$TRANSFORMERS_SPEC" peft trl accelerate datasets pillow \
-    safetensors modelscope huggingface_hub numpy || die "训练依赖安装失败"
+  # trl / datasets 用不上，不装（trl 可能卡 transformers 版本，让依赖解析失败）
+  pipi "$T" -c "$WORK/envs/train_torch_constraints.txt" "$TRANSFORMERS_SPEC" peft accelerate pillow \
+    safetensors modelscope huggingface_hub numpy ninja packaging || die "训练依赖安装失败"
+  # 快速路径不许动 torch / transformers / peft / accelerate 的版本（fla 依赖 transformers，可能想降级它）
+  "$T/bin/python" -m pip freeze | grep -iE '^(torch|torchvision|triton|transformers|peft|accelerate|safetensors|tokenizers)==' \
+    > "$WORK/envs/train_constraints.txt"
   if [[ "${SKIP_FASTPATH:-0}" != 1 ]]; then
     echo "  装线性注意力快速路径（失败不致命，只是慢）"
-    pipi "$T" -c "$WORK/envs/train_torch_constraints.txt" flash-linear-attention || warn "flash-linear-attention 没装上"
-    timeout 1800 "$T/bin/python" -m pip install --progress-bar off -i "$PIP_INDEX" \
-      -c "$WORK/envs/train_torch_constraints.txt" --no-build-isolation causal-conv1d || warn "causal-conv1d 没装上"
+    pipi "$T" -c "$WORK/envs/train_constraints.txt" flash-linear-attention || warn "flash-linear-attention 没装上"
+    if [[ "${WITH_CAUSAL_CONV1D:-1}" == 1 ]]; then
+      timeout 1800 "$T/bin/python" -m pip install --progress-bar off -i "$PIP_INDEX" \
+        -c "$WORK/envs/train_constraints.txt" --no-build-isolation causal-conv1d || warn "causal-conv1d 没装上"
+    fi
+    # 导入成功不等于能用：在 GPU 上真跑一遍前向 + 反向，和 torch 实现比对；哪个不过只卸哪个（各开一个进程）。
+    # 先查 causal-conv1d：它坏了会让 transformers 的 qwen3_5 模块导入失败，连带 fla 的自检也失败
+    for PKG in causal_conv1d fla; do
+      R=$("$T/bin/python" -c "import sys, json; sys.path.insert(0, '$HERE'); import train_sft; print(json.dumps(train_sft.fast_path_selftest('$PKG')))" 2>/dev/null | tail -1)
+      echo "  快速路径自检 $PKG：${R:-（进程崩溃）}"
+      if [[ "$R" != *'"ok": true'* && "$R" != *'"ok": null'* ]]; then
+        if [[ $PKG == fla ]]; then
+          warn "fla 自检不过，卸掉（训练退回 torch 实现，慢几倍）"
+          "$T/bin/python" -m pip uninstall -y flash-linear-attention fla-core
+        else
+          warn "causal-conv1d 自检不过，卸掉（卷积退回 torch，影响很小）"
+          "$T/bin/python" -m pip uninstall -y causal-conv1d
+        fi
+      fi
+    done
     if ! "$T/bin/python" -c "from transformers.models.qwen3_5 import modeling_qwen3_5" 2>/dev/null; then
       warn "装了快速路径后 transformers 的 qwen3_5 导入失败，卸掉它们"
       "$T/bin/python" -m pip uninstall -y flash-linear-attention fla-core causal-conv1d
@@ -166,6 +194,9 @@ if has_step venv-serve && [[ "${SKIP_VLLM:-0}" != 1 ]]; then
 import torch, vllm, transformers
 print("  vllm", vllm.__version__, "torch", torch.__version__, "CUDA", torch.version.cuda, "transformers", transformers.__version__)
 assert any(a.endswith("_120") for a in torch.cuda.get_arch_list()), "vLLM 带的 torch 没有 sm_120"
+assert torch.cuda.is_available(), "vLLM 带的 torch 用不了 GPU（CUDA 版本可能高于驱动）"
+x = torch.ones(256, 256, device="cuda", dtype=torch.bfloat16)
+assert float((x @ x).float().mean()) == 256.0
 EOF
   then
     SERVE_BACKEND=vllm
@@ -228,7 +259,8 @@ if has_step check; then
   step "6/7 GPU 检查（训练环境；有 vLLM 时服务环境也查）"
   for V in "$T" "$S"; do
     [[ -x "$V/bin/python" ]] || continue
-    "$V/bin/python" - <<'EOF' || die "GPU 检查失败（$V）"
+    [[ "$V" == "$S" && "$SERVE_BACKEND" != vllm ]] && continue
+    "$V/bin/python" - <<'EOF'
 import time, torch
 assert torch.cuda.is_available(), "CUDA 不可用"
 cap = torch.cuda.get_device_capability(0)
@@ -242,6 +274,11 @@ free, total = torch.cuda.mem_get_info()
 print(f"  {torch.cuda.get_device_name(0)} sm_{cap[0]}{cap[1]}  bf16 matmul {20 * 2 * 8192**3 / dt / 1e12:.0f} TFLOPS  "
       f"显存 {free / 2**30:.1f}/{total / 2**30:.1f} GB 空闲")
 EOF
+    if [[ $? != 0 ]]; then
+      [[ "$V" == "$T" ]] && die "GPU 检查失败（训练环境 $V）"
+      warn "服务环境 GPU 检查失败：评测改用 --backend hf"
+      SERVE_BACKEND=hf; echo "SERVE_BACKEND=hf" > "$WORK/logs/serve.env"
+    fi
   done
 fi
 
@@ -254,7 +291,7 @@ if has_step smoke; then
   KEEP="$WORK/logs/smoke_$TS"; mkdir -p "$KEEP"
   "$T/bin/python" "$HERE/common.py" synth --out "$SM/data" --n 24 || die "合成数据失败"
   COMMON_ARGS=(--model "$M08" --train "$SM/data/train.jsonl" --leak-check "$SM/data/bench.jsonl"
-               --batch-size 2 --grad-accum 2 --max-steps 10 --save-every 5 --log-every 1 --max-minutes 15 --num-workers 0)
+               --batch-size 2 --grad-accum 2 --max-steps 10 --save-every 5 --log-every 1 --max-minutes 15)
   "$T/bin/python" "$HERE/train_sft.py" "${COMMON_ARGS[@]}" --output "$SM/dry" --dry-run || die "dry-run 失败"
   "$T/bin/python" "$HERE/train_sft.py" "${COMMON_ARGS[@]}" --output "$SM/s1" --run-name smoke-s1 || die "冒烟训练失败"
   "$T/bin/python" "$HERE/train_sft.py" "${COMMON_ARGS[@]}" --output "$SM/shuf" --run-name smoke-shuffled \
@@ -266,7 +303,7 @@ if has_step smoke; then
   if [[ "$SERVE_BACKEND" == vllm ]]; then
     "$S/bin/python" "$HERE/merge_and_eval.py" eval --model "$SM/merged" --backend vllm --bench "$SM/data/bench.jsonl" \
       --out "$SM/pred_vllm.jsonl" --arm smoke --max-new-tokens 64 --max-model-len 4096 --gpu-mem-util 0.5 \
-      || { warn "vLLM 评测失败：正式评测改用 --backend hf"; echo "SERVE_BACKEND=hf" > "$WORK/logs/serve.env"; }
+      || { warn "vLLM 评测失败：正式评测改用 --backend hf"; SERVE_BACKEND=hf; echo "SERVE_BACKEND=hf" > "$WORK/logs/serve.env"; }
   fi
   "$T/bin/python" "$HERE/convert_adapter.py" convert --peft "$SM/s1/final_bf16" --out "$SM/mlx" || die "转 MLX 失败"
   cp "$SM/dry/dryrun.json" "$SM/dry/lora_targets.json" "$KEEP/" 2>/dev/null

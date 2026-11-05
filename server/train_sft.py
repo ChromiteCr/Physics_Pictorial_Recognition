@@ -4,7 +4,10 @@
   线性注意力 linear_attn 的投影要先在 Mac 上用 convert_adapter.py check-names 确认 MLX 同名后再用 --targets 加）。
   视觉塔、词嵌入、lm_head 全部冻结。
 - bf16、梯度检查点（use_reentrant=False）、只对最后一条助手回复算损失（见 common.py 文件头）。
-- 损失按 token 加权：一个优化步里所有微批次的目标 token 求和后再除以总数。
+- 损失按 token 加权：一个优化步里所有微批次的目标 token 求和后再除以总数（所以微批次怎么切不影响目标函数）。
+- 只算目标位置的 logits（logits_to_keep）：词表 248k，4096 长度整段 logits 要 4 GB，前向 + 反向翻倍。
+- 默认 max_len 4096、微批次 1 × 累积 16：诊断样本约 2,000–2,500 token；超长样本不截断而是丢弃，
+  正式训练时只要有一条超长就拒绝开训（--allow-truncation 才放行），dry-run 报告各 task 的长度分位数和超长数。
 - 数据顺序只由 (seed, epoch, id) 决定；--shuffle-labels 的打乱标签对照看到完全相同的批次。
 - 学习率调度由"计划总步数"决定；对照用 --match-steps-from <S1 输出目录> 读回 S1 的计划总步数和最终步数，
   两边学习率轨迹逐步相同。--max-minutes 只是安全闸。
@@ -27,6 +30,8 @@ import sys
 import time
 from pathlib import Path
 
+# DataLoader 用 fork 起工作进程，父进程已经用过 tokenizers 的线程池：关掉它的并行，免得子进程死锁
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C  # noqa: E402
 from convert_adapter import ATTN_MLP, LANG_PREFIXES, expected_lora_modules, hf_module_to_mlx  # noqa: E402
@@ -55,9 +60,11 @@ def parse_args(argv=None):
     ap.add_argument("--min-lr-ratio", type=float, default=0.1)
     ap.add_argument("--weight-decay", type=float, default=0.0)
     ap.add_argument("--max-grad-norm", type=float, default=1.0)
-    ap.add_argument("--batch-size", type=int, default=2, help="微批次大小")
-    ap.add_argument("--grad-accum", type=int, default=8)
-    ap.add_argument("--max-len", type=int, default=2048, help="超过的样本直接丢弃（不截断）")
+    ap.add_argument("--batch-size", type=int, default=1, help="微批次大小（等效批 = batch-size × grad-accum = 16）")
+    ap.add_argument("--grad-accum", type=int, default=16)
+    ap.add_argument("--max-len", type=int, default=4096, help="超过的样本直接丢弃（不截断）")
+    ap.add_argument("--allow-truncation", action="store_true",
+                    help="允许有超长样本（它们会被丢弃）；默认只要有一条超长就拒绝开训")
     ap.add_argument("--seed", type=int, default=1234)
     # LoRA
     ap.add_argument("--lora-r", type=int, default=16)
@@ -130,6 +137,80 @@ def versions() -> dict:
     return out
 
 
+def fast_path_selftest(which: str, device: str = "cuda") -> dict:
+    """在 GPU 上真跑一遍线性注意力快速路径的核（前向 + 反向），和 transformers 自带的 torch 实现比对。
+    导入成功不等于能用：预编译的 causal-conv1d 轮子可能没有 sm_120 内核，fla 的 Triton 核也可能在
+    消费级 Blackwell 上超共享内存。which = "fla" | "causal_conv1d"。ok=None 表示没装。
+    每个包单独开进程调用（CUDA 非法访存之类的错误会弄坏整个上下文）。"""
+    import torch
+    import torch.nn.functional as F
+
+    dev, bf = device, torch.bfloat16
+    gen = torch.Generator().manual_seed(0)
+
+    def rnd(*shape):
+        return torch.randn(*shape, generator=gen)
+
+    def rel(a, b):
+        a, b = a.detach().float(), b.detach().float()
+        return float((a - b).norm() / b.norm().clamp_min(1e-6))
+
+    try:
+        if which == "fla":
+            try:
+                from fla.ops.gated_delta_rule import chunk_gated_delta_rule
+            except ImportError as e:
+                return {"ok": None, "error": f"没装：{e!r}"[:300]}
+            from transformers.models.qwen3_5.modeling_qwen3_5 import torch_chunk_gated_delta_rule
+
+            # Qwen3.5-4B 线性注意力：16 个 k 头扩成 32 个 v 头，头维 128；T 不是 64 的倍数，测补齐
+            B, T, H, D = 1, 200, 4, 128
+            q, k, v = rnd(B, T, H, D), rnd(B, T, H, D), rnd(B, T, H, D)
+            g = -F.softplus(rnd(B, T, H)) * 0.5
+            beta = torch.sigmoid(rnd(B, T, H))
+            xs = [t.to(dev, bf).requires_grad_() for t in (q, k, v)]
+            o, _ = chunk_gated_delta_rule(*xs, g=g.to(dev), beta=beta.to(dev, bf), initial_state=None,
+                                          output_final_state=False, use_qk_l2norm_in_kernel=True)
+            o.float().pow(2).mean().backward()
+            ref, _ = torch_chunk_gated_delta_rule(q.to(dev), k.to(dev), v.to(dev), g=g.to(dev), beta=beta.to(dev),
+                                                  use_qk_l2norm_in_kernel=True)
+            err = rel(o, ref)
+            grads_ok = all(x.grad is not None and bool(torch.isfinite(x.grad).all()) for x in xs)
+            res = {"rel_err": err, "grads_finite": grads_ok}
+            try:  # 有 fla 时 transformers 还会用它的融合门控 RMSNorm
+                from fla.modules import FusedRMSNormGated
+
+                norm = FusedRMSNormGated(D, eps=1e-6, activation="silu").to(dev)
+                x, z = rnd(64, D).to(dev, bf).requires_grad_(), rnd(64, D).to(dev, bf).requires_grad_()
+                y = norm(x, z)
+                y.float().sum().backward()
+                xf = x.detach().float()
+                ref_n = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + 1e-6) * F.silu(z.detach().float())
+                res["norm_rel_err"] = rel(y, ref_n)
+            except ImportError:
+                res["norm_rel_err"] = None
+            res["ok"] = bool(math.isfinite(err) and err < 0.1 and grads_ok
+                             and (res["norm_rel_err"] is None or res["norm_rel_err"] < 0.1))
+            return res
+        if which == "causal_conv1d":
+            try:
+                from causal_conv1d import causal_conv1d_fn
+            except ImportError as e:
+                return {"ok": None, "error": f"没装：{e!r}"[:300]}
+            Bc, Dc, Tc, K = 2, 256, 77, 4
+            x = rnd(Bc, Dc, Tc).to(dev, bf).requires_grad_()
+            w = rnd(Dc, K).to(dev, bf)
+            y = causal_conv1d_fn(x=x, weight=w, bias=None, activation="silu")
+            y.float().sum().backward()
+            ref = F.silu(F.conv1d(x.detach().float(), w.float().unsqueeze(1), padding=K - 1, groups=Dc)[..., :Tc])
+            err = rel(y, ref)
+            ok = math.isfinite(err) and err < 0.05 and x.grad is not None and bool(torch.isfinite(x.grad).all())
+            return {"ok": bool(ok), "rel_err": err}
+        raise ValueError(which)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": repr(e)[:500]}
+
+
 def fast_path_info() -> dict:
     try:
         from transformers.models.qwen3_5 import modeling_qwen3_5 as m
@@ -178,7 +259,8 @@ def prepare_records(args, log):
 
 def encode_all(recs, originals, codec, args, log):
     """全部分词一遍：丢弃超长样本（不截断）。打乱标签时按原始目标的长度决定去留，保证和 S1 留下同一批样本。"""
-    items, dropped, lens, plens, tlens, by_task = [], [], [], [], [], {}
+    items, dropped, lens, plens, tlens = [], [], [], [], []
+    by_task: dict[str, dict[str, list]] = {}  # 全部样本（含超长）的长度，dry-run 看分位数用
     n_render_mismatch = 0
     for i, rec in enumerate(recs):
         enc = C.encode_example(rec, codec, args.data_root)
@@ -189,27 +271,45 @@ def encode_all(recs, originals, codec, args, log):
             n_decide = enc["n_prompt"] + len(codec.tokenize(ot + codec.end_marker, [])["input_ids"])
         if i < 20 and not C.check_full_render(rec, codec):
             n_render_mismatch += 1
+        bt = by_task.setdefault(rec["task"], {"total": [], "prompt": [], "target": [], "over": []})
+        bt["total"].append(n_decide)
+        bt["prompt"].append(enc["n_prompt"])
+        bt["target"].append(n_decide - enc["n_prompt"])
         if n_decide > args.max_len:
+            bt["over"].append(rec["id"])
             dropped.append(rec["id"])
             continue
         n = len(enc["input_ids"])
         lens.append(n)
         plens.append(enc["n_prompt"])
         tlens.append(enc["n_target"])
-        by_task.setdefault(rec["task"], []).append(n)
         light = None
         if enc["n_images"] == 0:
             light = {k: enc[k] for k in ("input_ids", "labels", "seq")}
             light["mm"] = {}
         items.append({"rec": rec, "enc": light})
-    stats = {"n_kept": len(items), "n_dropped_too_long": len(dropped), "dropped_ids": dropped[:50],
+    stats = {"max_len": args.max_len, "n_kept": len(items), "n_dropped_too_long": len(dropped),
+             "dropped_ids": dropped[:50],
              "tokens_total": C.length_stats(lens), "tokens_prompt": C.length_stats(plens),
              "tokens_target": C.length_stats(tlens),
-             "by_task": {k: C.length_stats(v) for k, v in sorted(by_task.items())},
+             "by_task": {k: {"n": len(v["total"]), "n_over_max_len": len(v["over"]),
+                             "total": C.length_stats(v["total"]), "prompt": C.length_stats(v["prompt"]),
+                             "target": C.length_stats(v["target"])} for k, v in sorted(by_task.items())},
              "full_render_mismatch_first20": n_render_mismatch}
     if n_render_mismatch:
         log("warning", msg=f"前 20 条里有 {n_render_mismatch} 条：完整对话渲染 ≠ prompt + 目标 + 结束符。检查模板。")
     return items, stats
+
+
+def length_table(tok_stats) -> str:
+    """dry-run 打印用：每个 task 的总长 / 目标长分位数和超长条数（超长 = prompt + 目标 > max_len，会被丢弃）。"""
+    rows = [f"max_len={tok_stats['max_len']}  保留 {tok_stats['n_kept']}  超长丢弃 {tok_stats['n_dropped_too_long']}",
+            f"{'task':<10}{'n':>6}{'超长':>6}  总长 p50/p90/p99/max          目标 p50/p90/p99/max"]
+    for task, s in tok_stats["by_task"].items():
+        t, g = s["total"], s["target"]
+        q = (lambda d: "/".join(str(d.get(k, "-")) for k in ("p50", "p90", "p99", "max")))
+        rows.append(f"{task:<10}{s['n']:>6}{s['n_over_max_len']:>6}  {q(t):<28}{q(g)}")
+    return "\n".join(rows)
 
 
 def build_plan(items, args, start_step=0):
@@ -334,7 +434,8 @@ def collate(batch, pad_id):
     out = {"input_ids": torch.full((B, L), pad_id, dtype=torch.long),
            "labels": torch.full((B, L), C.IGNORE_INDEX, dtype=torch.long),
            "attention_mask": torch.zeros((B, L), dtype=torch.long)}
-    seq_keys = [k for k in batch[0]["seq"] if k != "attention_mask"]
+    # 取所有样本的并集：某条缺的键补 0（mm_token_type_ids 的 0 = 文字，纯文字样本本来就全是 0）
+    seq_keys = sorted({k for x in batch for k in x["seq"] if k != "attention_mask"})
     for k in seq_keys:
         out[k] = torch.zeros((B, L), dtype=torch.long)
     for i, x in enumerate(batch):
@@ -343,7 +444,8 @@ def collate(batch, pad_id):
         out["labels"][i, :n] = torch.tensor(x["labels"])
         out["attention_mask"][i, :n] = 1
         for k in seq_keys:
-            out[k][i, :n] = torch.tensor(x["seq"][k])
+            if k in x["seq"]:
+                out[k][i, :n] = torch.tensor(x["seq"][k])
     mm_keys = sorted({k for x in batch for k in x["mm"]})
     for k in mm_keys:
         out[k] = torch.cat([x["mm"][k] for x in batch if k in x["mm"]], dim=0)
@@ -359,11 +461,25 @@ def token_ce_sum(logits, labels):
     return F.cross_entropy(shift_logits[mask].float(), shift_labels[mask], reduction="sum")
 
 
+def logits_keep(labels) -> int:
+    """只需要从"第一个目标 token 的前一位"到序列末尾的 logits（右填充，目标在每行末尾）。"""
+    valid = labels != C.IGNORE_INDEX
+    L = labels.shape[1]
+    if not bool(valid.any()):
+        return 1
+    first = int(valid.float().argmax(dim=1)[valid.any(dim=1)].min())
+    return max(1, min(L, L - first + 1))
+
+
 def forward_loss(model, batch, device):
     labels = batch.pop("labels")
+    keep = logits_keep(labels)
     batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
-    out = model(**batch, use_cache=False)
-    return token_ce_sum(out.logits, labels)
+    out = model(**batch, use_cache=False, logits_to_keep=keep)
+    logits = out.logits
+    if logits.shape[1] != keep:  # 模型没认 logits_to_keep 时退回整段
+        keep = logits.shape[1]
+    return token_ce_sum(logits, labels[:, labels.shape[1] - keep:])
 
 
 class SFTData:
@@ -445,7 +561,8 @@ def main(argv=None):
     cfg = {k: getattr(args, k) for k in ("model", "seed", "lr", "batch_size", "grad_accum", "epochs", "max_len",
                                          "lora_r", "lora_alpha", "lora_dropout", "warmup_ratio", "min_lr_ratio",
                                          "weight_decay", "max_grad_norm", "tasks", "max_steps", "max_minutes",
-                                         "shuffle_labels", "shuffle_tasks", "backend", "train", "val", "data_root")}
+                                         "shuffle_labels", "shuffle_tasks", "backend", "train", "val", "data_root",
+                                         "allow_truncation")}
     cfg["model"] = os.path.basename(os.path.normpath(args.model))
     cfg["targets"] = list(targets)
     log("start", config=cfg, run_name=args.run_name, versions=versions(), fast_path=fast_path_info())
@@ -469,6 +586,11 @@ def main(argv=None):
     log("data", encode_seconds=round(time.time() - t0, 1), kept_ids_sha256=kept_digest, planned_total_steps=planned,
         stop_at_step=stop_at, n_micro_batches=len(micro), **{k: v for k, v in tok_stats.items() if k != "dropped_ids"})
     match_diffs = check_match(args, cfg, kept_digest, log)
+    print(length_table(tok_stats), flush=True)
+    refuse = tok_stats["n_dropped_too_long"] > 0 and not args.allow_truncation
+    if refuse:
+        log("warning", msg=f"{tok_stats['n_dropped_too_long']} 条样本超过 max_len={args.max_len}（不截断，会被丢弃）："
+                           "正式训练会拒绝开训。加大 --max-len，或确认后加 --allow-truncation（S1 和对照要一致）。")
 
     if args.dry_run:
         hf_keys = list(C.model_weight_shapes(args.model))
@@ -478,12 +600,15 @@ def main(argv=None):
         rep = {"config": cfg, "data": data_report, "tokens": tok_stats, "planned_total_steps": planned,
                "stop_at_step": stop_at, "kept_ids_sha256": kept_digest, "n_lora_modules": len(lora),
                "lora_by_suffix": {s: sum(m["hf"].endswith("." + s) for m in lora) for s in targets},
-               "match_diffs": match_diffs}
+               "match_diffs": match_diffs, "would_refuse_training": refuse}
         (out / "dryrun.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
         log("dry_run_done", n_kept=tok_stats["n_kept"], dropped=tok_stats["n_dropped_too_long"],
             planned_total_steps=planned, n_lora_modules=len(lora))
         return 0
 
+    if refuse:
+        raise SystemExit(f"有 {tok_stats['n_dropped_too_long']} 条样本超过 --max-len {args.max_len}，拒绝开训"
+                         f"（例：{tok_stats['dropped_ids'][:5]}）。加大 --max-len，或确认后加 --allow-truncation。")
     import torch
 
     if not torch.cuda.is_available():

@@ -369,3 +369,218 @@ def test_lr_schedule_and_targets():
     assert T.is_language_linear("model.language_model.layers.3.mlp.up_proj")
     assert not T.is_language_linear("model.visual.blocks.0.mlp.linear_fc1")
     assert not T.is_language_linear("mtp.layers.0.mlp.up_proj")
+
+
+# ---------------------------------------------------------------- 长度、超长、打乱统计、合成数据带图
+
+def test_encode_all_reports_over_length_per_task(tmp_path):
+    import train_sft as T
+
+    recs = [diag(f"d-{i}") for i in range(3)] + [rec("k-1", task="knowledge", target="短")]
+    a = _args(tmp_path)
+    n0 = len(C.encode_example(recs[0], CODEC, load_image=lambda p: p)["input_ids"])
+    a.max_len = n0 - 1  # 诊断样本全部超长，知识样本不超
+    items, st = T.encode_all(recs, {r["id"]: r for r in recs}, CODEC, a, lambda *x, **k: None)
+    assert [it["rec"]["id"] for it in items] == ["k-1"]
+    assert st["n_dropped_too_long"] == 3 and st["max_len"] == n0 - 1
+    assert st["by_task"]["diagnose"]["n_over_max_len"] == 3 and st["by_task"]["knowledge"]["n_over_max_len"] == 0
+    # 分位数按全部样本（含超长）统计，不然 max 永远 ≤ max_len，看不出问题
+    assert st["by_task"]["diagnose"]["total"]["max"] == n0
+    assert st["by_task"]["diagnose"]["target"]["p50"] > 0
+    table = T.length_table(st)
+    assert "diagnose" in table and "超长丢弃 3" in table
+
+
+def test_defaults_fit_long_diagnose_samples(tmp_path):
+    """诊断样本约 2,000–2,500 token：默认 max_len 4096、微批次 1 × 累积 16；生成长度和上下文留足。"""
+    import merge_and_eval as M
+    import train_sft as T
+
+    a = T.parse_args(["--model", "m", "--train", "t.jsonl", "--output", str(tmp_path)])
+    assert a.max_len >= 4096 and a.batch_size * a.grad_accum == 16 and not a.allow_truncation
+    assert T.parse_args(["--model", "m", "--train", "t", "--output", "o", "--allow-truncation"]).allow_truncation
+    e = M.build_parser().parse_args(["eval", "--model", "m", "--bench", "b.jsonl", "--out", "o", "--arm", "x"])
+    assert e.max_new_tokens >= 1024 and e.max_model_len >= 12288
+
+
+def test_shuffle_top_changed_counts_name_only_targets():
+    """"自己提出原因"变体：目标只写中文名、没有 cause_id，也要能判断第一名换没换。"""
+    n_top = 0
+    for i in range(200):
+        order = [i % 4] + [j for j in range(4) if j != i % 4]
+        target = {"ranked": [{"name": CAUSES[j]["name"], "prob": p} for j, p in zip(order, (0.7, 0.2, 0.05, 0.05))]}
+        r = rec(f"p-{i}", target=json.dumps(target, ensure_ascii=False),
+                meta={"experiment_id": "hooke", "causes": CAUSES})
+        new, info = C.shuffle_cause_labels(r, 5)
+        assert info["changed"] or new["meta"]["label_shuffle"]["perm"][order[0]] == order[0]
+        n_top += info["top_changed"]
+    assert 0.6 < n_top / 200 < 0.9  # 均匀置换：约 1 − 1/4
+
+
+def test_synthetic_bench_has_an_image_record(tmp_path):
+    pytest.importorskip("PIL")
+    info = C.make_synthetic(tmp_path, n=8, n_bench=2, with_images=True)
+    tr, be = C.load_records([info["train"]]), C.load_records([info["bench"]])
+    assert sum(bool(C.image_refs(r["messages"])) for r in be) == 1  # 冒烟评测也走一遍带图的生成
+    assert sum(bool(C.image_refs(r["messages"])) for r in tr) == 4
+    assert C.leakage_report(tr, C.load_bench_index([info["bench"]], tmp_path), tmp_path)["clean"]
+
+
+def test_unmarked_image_guard(tmp_path):
+    import hashlib
+
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "a.jpg").write_bytes(b"raw-photo")
+    sha1 = hashlib.sha1(b"raw-photo").hexdigest()
+    r = rec("recbench-a", task="recognize", images=("images/a.jpg",),
+            meta={"image_sha1": sha1, "legend": [{"n": 1}], "split": "test"})
+    assert C.unmarked_image_hits([r], tmp_path) == ["recbench-a"]  # 拿到的是没画框的原图
+    (tmp_path / "images" / "a.jpg").write_bytes(b"photo-with-boxes")
+    assert C.unmarked_image_hits([r], tmp_path) == []
+    r2 = rec("x", images=("images/a.jpg",), meta={"image_sha1": hashlib.sha1(b"photo-with-boxes").hexdigest()})
+    assert C.unmarked_image_hits([r2], tmp_path) == []  # 没有 legend 的不查
+
+
+# ---------------------------------------------------------------- 只算目标位置的 logits、批内拼接
+
+def test_logits_keep_matches_full_loss():
+    torch = pytest.importorskip("torch")
+    import train_sft as T
+
+    g = torch.Generator().manual_seed(0)
+    B, L, V = 3, 12, 7
+    labels = torch.full((B, L), C.IGNORE_INDEX)
+    labels[0, 5:9] = torch.randint(0, V, (4,), generator=g)   # 右填充：第 0 行长 9
+    labels[1, 8:12] = torch.randint(0, V, (4,), generator=g)
+    labels[2, 3:6] = torch.randint(0, V, (3,), generator=g)
+    logits = torch.randn(B, L, V, generator=g)
+    keep = T.logits_keep(labels)
+    assert keep == L - 3 + 1
+    full = T.token_ce_sum(logits, labels)
+    part = T.token_ce_sum(logits[:, L - keep:], labels[:, L - keep:])
+    assert torch.allclose(full, part)
+    assert T.logits_keep(torch.full((1, 5), C.IGNORE_INDEX)) == 1
+
+
+def test_collate_union_of_seq_keys():
+    torch = pytest.importorskip("torch")
+    import train_sft as T
+
+    a = {"input_ids": [1, 2, 3], "labels": [-100, 2, 3], "seq": {"attention_mask": [1] * 3}, "mm": {}}
+    b = {"input_ids": [4, 5], "labels": [-100, 5], "seq": {"attention_mask": [1, 1], "mm_token_type_ids": [0, 1]},
+         "mm": {"pixel_values": torch.ones(2, 3), "image_grid_thw": torch.tensor([[1, 1, 2]])}}
+    out = T.collate([a, b], pad_id=0)
+    assert out["mm_token_type_ids"].tolist() == [[0, 0, 0], [0, 1, 0]]
+    assert out["attention_mask"].tolist() == [[1, 1, 1], [1, 1, 0]]
+    assert out["pixel_values"].shape == (2, 3) and out["image_grid_thw"].shape == (1, 3)
+
+
+def _tiny_qwen35():
+    transformers = pytest.importorskip("transformers")
+    torch = pytest.importorskip("torch")
+    if not hasattr(transformers, "Qwen3_5Config"):
+        pytest.skip("transformers 没有 qwen3_5")
+    cfg = transformers.Qwen3_5Config(
+        text_config=dict(vocab_size=300, hidden_size=64, intermediate_size=128, num_hidden_layers=4,
+                         num_attention_heads=2, num_key_value_heads=1, head_dim=32, linear_key_head_dim=16,
+                         linear_value_head_dim=16, linear_num_key_heads=2, linear_num_value_heads=4,
+                         rope_parameters={"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [4, 6, 6],
+                                          "mrope_interleaved": True, "partial_rotary_factor": 1.0}),
+        vision_config=dict(depth=1, hidden_size=32, intermediate_size=64, num_heads=2, patch_size=16,
+                           spatial_merge_size=2, temporal_patch_size=2, out_hidden_size=64, num_position_embeddings=64),
+        image_token_id=290, video_token_id=291, vision_start_token_id=292, vision_end_token_id=293)
+    torch.manual_seed(0)
+    return transformers.AutoModelForImageTextToText.from_config(cfg), torch
+
+
+def test_tiny_qwen35_names_and_masked_forward():
+    """真的 transformers qwen3_5 类（随机小模型，CPU）：LoRA 目标名、视觉塔排除、带图混合批次、
+    梯度检查点 + 只算目标 logits 的损失等于整段 logits 的损失。"""
+    import train_sft as T
+
+    model, torch = _tiny_qwen35()
+    names = T.lora_module_names(model, T.resolve_targets("all-linear"))
+    suffixes = {n.rsplit(".", 1)[-1] for n in names}
+    assert suffixes == set(T.ATTN_MLP) | set(T.LINEAR_ATTN)
+    assert all(n.startswith("model.language_model.layers.") for n in names)
+    assert len(T.lora_module_names(model, T.ATTN_MLP)) == 1 * 4 + 4 * 3  # 1 层全注意力 + 4 层 MLP
+    from convert_adapter import expected_lora_modules
+
+    assert sorted(names) == expected_lora_modules(list(model.state_dict()), T.resolve_targets("all-linear"))
+
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model.enable_input_require_grads()
+    for n, p in model.named_parameters():
+        p.requires_grad_(n.endswith(("q_proj.weight", "in_proj_qkv.weight")))
+    model.train()
+    grid = torch.tensor([[1, 4, 4]])
+    ids1 = [5, 6, 7, 292, 290, 290, 290, 290, 293, 8, 9, 10, 11]
+    batch = [
+        {"input_ids": ids1, "labels": [-100] * 10 + ids1[10:],
+         "seq": {"attention_mask": [1] * 13, "mm_token_type_ids": [0] * 4 + [1] * 4 + [0] * 5},
+         "mm": {"pixel_values": torch.randn(16, 3 * 2 * 16 * 16), "image_grid_thw": grid}},
+        {"input_ids": [12, 13, 14, 15, 16], "labels": [-100, -100, -100, 15, 16],
+         "seq": {"attention_mask": [1] * 5}, "mm": {}},
+    ]
+    b = T.collate(batch, pad_id=0)
+    loss = T.forward_loss(model, dict(b), torch.device("cpu"))
+    loss.backward()
+    assert any(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in model.parameters())
+    with torch.no_grad():
+        model.eval()
+        part = T.forward_loss(model, dict(b), torch.device("cpu"))
+        bb = dict(b)
+        labels = bb.pop("labels")
+        full = T.token_ce_sum(model(**bb, use_cache=False).logits, labels)
+        swapped = T.forward_loss(model, dict(T.collate(batch[::-1], pad_id=0)), torch.device("cpu"))
+    assert torch.allclose(part, full, rtol=1e-4, atol=1e-4)
+    assert torch.allclose(part, swapped, rtol=1e-3, atol=1e-3)  # 换个顺序（填充位置不同）损失不变
+
+
+def test_fast_path_selftest_logic_with_fake_kernels(monkeypatch):
+    """服务器上用来决定卸不卸 fla / causal-conv1d 的自检：这里用 torch 实现冒充核，验证判定逻辑。"""
+    torch = pytest.importorskip("torch")
+    tr = pytest.importorskip("transformers")
+    if not hasattr(tr, "Qwen3_5Config"):
+        pytest.skip("transformers 没有 qwen3_5")
+    import types
+
+    import torch.nn.functional as F
+    import train_sft as T
+    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated, torch_chunk_gated_delta_rule
+
+    fla = types.ModuleType("fla")
+    ops = types.ModuleType("fla.ops")
+    gdr = types.ModuleType("fla.ops.gated_delta_rule")
+    mods = types.ModuleType("fla.modules")
+    gdr.chunk_gated_delta_rule = torch_chunk_gated_delta_rule
+
+    class FakeNorm(Qwen3_5RMSNormGated):
+        def __init__(self, d, eps=1e-6, activation="silu"):
+            super().__init__(d, eps=eps)
+
+    mods.FusedRMSNormGated = FakeNorm
+    for name, m in {"fla": fla, "fla.ops": ops, "fla.ops.gated_delta_rule": gdr, "fla.modules": mods}.items():
+        monkeypatch.setitem(sys.modules, name, m)
+    r = T.fast_path_selftest("fla", device="cpu")
+    assert r["ok"] is True and r["rel_err"] < 0.05 and r["norm_rel_err"] < 0.05, r
+
+    def bad(*a, **k):
+        o, s = torch_chunk_gated_delta_rule(*a, **k)
+        return o * 2, s
+
+    gdr.chunk_gated_delta_rule = bad
+    assert T.fast_path_selftest("fla", device="cpu")["ok"] is False
+
+    cc = types.ModuleType("causal_conv1d")
+
+    def conv(x, weight, bias=None, activation=None, **k):
+        return F.silu(F.conv1d(x, weight.unsqueeze(1), bias, padding=weight.shape[1] - 1, groups=x.shape[1])
+                      [..., : x.shape[-1]])
+
+    cc.causal_conv1d_fn = conv
+    monkeypatch.setitem(sys.modules, "causal_conv1d", cc)
+    assert T.fast_path_selftest("causal_conv1d", device="cpu")["ok"] is True
+    monkeypatch.setitem(sys.modules, "causal_conv1d", None)  # 没装
+    assert T.fast_path_selftest("causal_conv1d", device="cpu")["ok"] is None

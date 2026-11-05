@@ -125,6 +125,7 @@ bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.free
   现有 200 张照片全拍于 29 分钟内，默认间隔只得到 1 个时段，`split` 会拒绝并列出各间隔下的时段数，由学生用 `--gap-s N|auto` 定下来（写进 `split.json.params`）。
   时段太少时测试集与训练集的相邻照片仍可能是同一场景的连拍，`split.json.nearest_train_gap_s` 记录最近间隔。
   `split.json.status` 初始为 `draft`；学生定好间隔和种子后运行 `recognition_bench --out <bench 目录> confirm --who <姓名>` 改成 `confirmed`，在此之前 `meta.json` 带"切分还是草稿"的警告。命令行里 `--manifest`、`--out` 是顶层选项，写在子命令前面。
+  开发识别模块时已经看过或跑过的照片（`recognition_bench.DEV_SEEN_STEMS`）所在的时段固定划进训练侧，不进测试集，记在 `split.json.dev_seen_forced_train`；可选时段不够 k 个时测试集相应缩小并警告，一个都不剩时拒绝切分。
   **训练样本生成必须排除 `split_ids(load_split(), "test")`**，并用 `check_no_overlap` 自查。
 - **`test.jsonl`**：§2.5 的格式，`task=recognize`、`source=photo`、`id=recbench-<照片id>`。messages 由 `vision/prompt.py` 的 `build_messages` 拼，
   图是带编号框的 `images/<id>.jpg`（编号框来自 YOLO **检测**结果，与推理一致，不是真值框）。assistant 里只有 `letter` 是 gold，`open_name/cues/apparatus` 只是占位。
@@ -208,7 +209,6 @@ bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.free
 ## 3. 统一约定
 - 纯 numpy/scipy，不引入新依赖（需要时在 pyproject 里集中加，由主会话处理）。
 - 随机性只用 `np.random.Generator`，所有生成函数接受 `seed`。
-  开发识别模块时已经看过或跑过的照片（`recognition_bench.DEV_SEEN_STEMS`）所在的时段固定划进训练侧，不进测试集，记在 `split.json.dev_seen_forced_train`；可选时段不够 k 个时测试集相应缩小并警告，一个都不剩时拒绝切分。
 - 每个模块配 `tests/test_<模块>.py`，单个测试 < 10 秒；整套测试 < 2 分钟。
 - 本机内存上限：我们启动的所有进程合计 ≤ 24 GB；测试和生成任务控制在 < 2 GB。
 - 不调用任何外部 API（蒸馏脚本除外，且只由用户提供 key 后手动运行）。

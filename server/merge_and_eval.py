@@ -9,8 +9,10 @@
          --shots K --shots-from 训练池：3-shot 基线（示例只取自训练池、同 task、只用纯文字样本，按 id 确定性挑选）。
          --resume：跳过输出文件里已有的 id，逐块追加（断点续跑）。
 
-预测 JSONL 每行：id、task、source、experiment_id、split、bench_file、arm、backend、model、adapter、
-prediction、gold、has_think、gold_is_json、json_ok、exact、n_prompt_tokens、n_gen_tokens、finish_reason、error。
+预测 JSONL 每行：id、text（模型原始输出，bench 打分器 recognition_bench score 读这个键）、task、source、experiment_id、
+split、bench_file、arm、backend、model、adapter、prediction（同 text，旧名）、gold、has_think、gold_is_json、json_ok、
+exact、n_prompt_tokens、n_gen_tokens、finish_reason、latency_s（整块平均）、error。
+识别 bench 的图必须是带编号框的版本：图片字节等于 meta.image_sha1（没画框的原图）就直接停。
 旁边写 <输出>.summary.json：参数、bench 文件哈希、计数、JSON 合法率、思考标记率、耗时、版本。
 评分不在这里做（bench 模块负责）。
 """
@@ -121,17 +123,17 @@ def is_json(s: str) -> bool:
         return False
 
 
-def make_row(it, args, text, n_prompt, n_gen, finish, error=None):
+def make_row(it, args, text, n_prompt, n_gen, finish, error=None, latency=None):
     rec, meta = it["rec"], C.meta_of(it["rec"])
     gold_json = is_json(it["gold"])
     pred = text or ""
-    return {"id": rec["id"], "task": rec["task"], "source": rec.get("source"),
+    return {"id": rec["id"], "text": pred, "task": rec["task"], "source": rec.get("source"),
             "experiment_id": meta.get("experiment_id"), "split": meta.get("split"), "bench_file": it["bench_file"],
             "arm": args.arm, "backend": args.backend, "model": args.model, "adapter": args.adapter,
             "shots": args.shots, "prediction": pred, "gold": it["gold"], "has_think": bool(THINK_RE.search(pred)),
             "gold_is_json": gold_json, "json_ok": is_json(pred) if gold_json else None,
             "exact": pred.strip() == it["gold"].strip(), "n_prompt_tokens": n_prompt, "n_gen_tokens": n_gen,
-            "finish_reason": finish, "error": error}
+            "finish_reason": finish, "latency_s": latency, "error": error}
 
 
 # ---------------------------------------------------------------- 后端
@@ -152,6 +154,7 @@ def run_vllm(items, args, write):
 
     for i in range(0, len(items), args.chunk):
         chunk = items[i:i + args.chunk]
+        t0 = time.time()
         try:
             outs = llm.generate([to_input(it) for it in chunk], sp)
             pairs = list(zip(chunk, outs))
@@ -162,9 +165,11 @@ def run_vllm(items, args, write):
                     pairs.append((it, llm.generate([to_input(it)], sp)[0]))
                 except Exception as e:  # noqa: BLE001
                     write(make_row(it, args, "", None, 0, "error", repr(e)[:500]))
+        lat = (time.time() - t0) / max(len(chunk), 1)
         for it, o in pairs:
             c = o.outputs[0]
-            write(make_row(it, args, c.text, len(o.prompt_token_ids or []), len(c.token_ids), c.finish_reason))
+            write(make_row(it, args, c.text, len(o.prompt_token_ids or []), len(c.token_ids), c.finish_reason,
+                           latency=lat))
 
 
 def run_hf(items, args, write):
@@ -187,9 +192,10 @@ def run_hf(items, args, write):
     for s in range(0, len(order), args.batch_size):
         batch = [items[i] for i in order[s:s + args.batch_size]]
         imgs = [C.load_pil(C.resolve_image(r, args.data_root)) for it in batch for r in it["images"]]
+        t0 = time.time()
         try:
             enc = processor(text=[it["prompt"] for it in batch], images=imgs or None, padding=True,
-                            return_tensors="pt").to("cuda:0")
+                            padding_side="left", return_tensors="pt").to("cuda:0")
             with torch.no_grad():
                 gen = model.generate(**enc, max_new_tokens=args.max_new_tokens, do_sample=False, temperature=None,
                                      top_p=None, top_k=None, pad_token_id=pad)
@@ -199,13 +205,14 @@ def run_hf(items, args, write):
             continue
         n_in = enc["input_ids"].shape[1]
         n_prompt = enc["attention_mask"].sum(1).tolist()
+        lat = (time.time() - t0) / len(batch)
         for j, it in enumerate(batch):
             new = gen[j, n_in:].tolist()
             stop = next((k for k, t in enumerate(new) if t in eos), None)
             body = new if stop is None else new[:stop]
             text = tok.decode(body, skip_special_tokens=True)
             write(make_row(it, args, text, int(n_prompt[j]), len(body) + (stop is not None),
-                           "stop" if stop is not None else "length"))
+                           "stop" if stop is not None else "length", latency=lat))
 
 
 # ---------------------------------------------------------------- eval 主流程
@@ -225,6 +232,11 @@ def evaluate(args) -> dict:
         recs = C.load_records([bf])
         if args.limit:
             recs = recs[: args.limit]
+        unmarked = C.unmarked_image_hits(recs, args.data_root)
+        if unmarked:
+            raise SystemExit(f"{bf}：{len(unmarked)} 条的图片是没画编号框的原图（字节等于 meta.image_sha1），"
+                             f"例 {unmarked[:3]}。打包时 bench 图片取错了目录：把 --data-root 指向 bench 自己的目录"
+                             f"（里面的 images/ 是带框的），或重新打包。")
         items.extend(build_items(recs, Path(bf).name, codec, args, pool))
     out = Path(args.out)
     done = set()
@@ -275,7 +287,7 @@ def _versions() -> dict:
     return out
 
 
-def main(argv=None):
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="合并适配器 / bench 贪心生成")
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("merge")
@@ -294,14 +306,20 @@ def main(argv=None):
     e.add_argument("--shots", type=int, default=0)
     e.add_argument("--shots-from", nargs="*", default=[])
     e.add_argument("--seed", type=int, default=0)
-    e.add_argument("--max-new-tokens", type=int, default=768)
-    e.add_argument("--max-model-len", type=int, default=6144)
+    e.add_argument("--max-new-tokens", type=int, default=1536,
+                   help="诊断 JSON 约 700 字 ≈ 400–600 token；留足余量，截断的回复 JSON 不合法")
+    e.add_argument("--max-model-len", type=int, default=16384,
+                   help="vLLM 上下文长度：诊断提示约 2,000–2,500 token，3-shot 再加 3 个示例约 1 万")
     e.add_argument("--gpu-mem-util", type=float, default=0.85)
     e.add_argument("--batch-size", type=int, default=16, help="hf 后端的批大小")
     e.add_argument("--chunk", type=int, default=512, help="vllm 每次提交的条数（也是断点粒度）")
     e.add_argument("--limit", type=int, default=0, help="每个 bench 文件只取前 N 条（冒烟用）")
     e.add_argument("--resume", action="store_true")
-    a = ap.parse_args(argv)
+    return ap
+
+
+def main(argv=None):
+    a = build_parser().parse_args(argv)
     if a.cmd == "merge":
         print(json.dumps(merge(a.base, a.adapter, a.out, a.device), ensure_ascii=False, indent=1))
         return 0

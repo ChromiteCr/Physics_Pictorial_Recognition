@@ -6,10 +6,14 @@
 [server]
 fileWatcherType = "none"
 
+# 2026-11-05（P2）：完全离线——不上报使用统计。
+[browser]
+gatherUsageStats = false
+
 # 2026-07-14：黑板粉笔实验记录本配色——深墨绿黑板底、奶白粉笔字、黄粉笔强调色。
 # 用原生 [theme] 覆盖大部分组件（按钮/滑块/输入框/提示框），字体和签名细节
-# 另外在 app.py 里用注入 CSS 补（data_editor 内部是 canvas 渲染，CSS 管不到，
-# 不强求）。
+# 另外在 ui/theme.py 里用注入 CSS 补（只用系统字体，不加载在线字体；
+# data_editor 内部是 canvas 渲染，CSS 管不到，不强求）。
 [theme]
 base = "dark"
 primaryColor = "#eec25f"
