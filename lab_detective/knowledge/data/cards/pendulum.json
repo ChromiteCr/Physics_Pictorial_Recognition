@@ -7,15 +7,57 @@
   "principle": "摆角很小时，单摆的回复力 F = −(mg/L)x，做简谐运动，周期 T = 2π√(L/g)，与摆球质量和（小）振幅无关。两边平方得 T² = (4π²/g)·L，所以以 L 为横轴、T² 为纵轴作图是一条过原点的直线，斜率 k = 4π²/g，g = 4π²/k。摆长 L 是悬点到摆球球心的距离。摆角变大时周期会变长（约为 T₀(1 + θ₀²/16)），所以摆角要小于 5°；测多次全振动的总时间再除以次数，可以减小计时误差。",
   "formula": "T = 2π√(L/g)；作图关系：T² = (4π²/g)·L，g = 4π²/k",
   "variables": [
-    {"symbol": "L", "name": "摆长（悬点到摆球球心）", "unit": "m", "role": "control"},
-    {"symbol": "l", "name": "摆线长（悬点到摆球上端）", "unit": "m", "role": "measured"},
-    {"symbol": "d", "name": "摆球直径", "unit": "m", "role": "measured"},
-    {"symbol": "t", "name": "N 次全振动的总时间", "unit": "s", "role": "measured"},
-    {"symbol": "N", "name": "全振动次数", "unit": "", "role": "control"},
-    {"symbol": "T", "name": "周期 T = t/N", "unit": "s", "role": "derived"},
-    {"symbol": "g", "name": "重力加速度", "unit": "m/s²", "role": "derived"}
+    {
+      "symbol": "L",
+      "name": "摆长（悬点到摆球球心）",
+      "unit": "m",
+      "role": "control"
+    },
+    {
+      "symbol": "l",
+      "name": "摆线长（悬点到摆球上端）",
+      "unit": "m",
+      "role": "measured"
+    },
+    {
+      "symbol": "d",
+      "name": "摆球直径",
+      "unit": "m",
+      "role": "measured"
+    },
+    {
+      "symbol": "t",
+      "name": "N 次全振动的总时间",
+      "unit": "s",
+      "role": "measured"
+    },
+    {
+      "symbol": "N",
+      "name": "全振动次数",
+      "unit": "",
+      "role": "control"
+    },
+    {
+      "symbol": "T",
+      "name": "周期 T = t/N",
+      "unit": "s",
+      "role": "derived"
+    },
+    {
+      "symbol": "g",
+      "name": "重力加速度",
+      "unit": "m/s²",
+      "role": "derived"
+    }
   ],
-  "apparatus": ["铁架台（带铁夹）", "细线（约 1 m，不易伸长）", "带小孔的小钢球", "刻度尺（米尺）", "游标卡尺", "手机（传感器计时）或秒表"],
+  "apparatus": [
+    "铁架台（带铁夹）",
+    "细线（约 1 m，不易伸长）",
+    "带小孔的小钢球",
+    "刻度尺（米尺）",
+    "游标卡尺",
+    "手机（传感器计时）或秒表"
+  ],
   "steps": [
     "把细线一端穿过小钢球的小孔并打结，另一端用铁夹夹紧在铁架台上，使悬点固定，让摆球自然下垂。",
     "用游标卡尺测摆球直径 d，用米尺量悬点到摆球上端的线长 l，摆长 L = l + d/2。",
@@ -24,7 +66,18 @@
     "改变摆长，使 L 约为 40 cm、55 cm、70 cm、85 cm、100 cm，重复步骤 2~4。",
     "以 L 为横轴、T² 为纵轴作图，求出图线的斜率 k，g = 4π²/k。"
   ],
-  "data_table": {"columns": ["次数", "线长 l/cm", "摆球直径 d/cm", "摆长 L/cm", "全振动次数 N", "总时间 t/s", "周期 T/s", "T²/s²"]},
+  "data_table": {
+    "columns": [
+      "次数",
+      "线长 l/cm",
+      "摆球直径 d/cm",
+      "摆长 L/cm",
+      "全振动次数 N",
+      "总时间 t/s",
+      "周期 T/s",
+      "T²/s²"
+    ]
+  },
   "safety": [
     "铁架台放稳，必要时在底座上压重物，防止摆动时翻倒。",
     "细线和摆球要系牢，摆动时不要站在摆球运动的竖直平面内，防止摆球甩出伤人。",
@@ -39,16 +92,50 @@
     "pendulum.timing_offset"
   ],
   "knowledge_points": [
-    "kp.simple_pendulum_period",
-    "kp.simple_harmonic_motion",
-    "kp.small_angle_approximation",
-    "kp.graph_linearization",
-    "kp.conical_pendulum",
-    "kp.timing_and_counting",
+    "kp.pendulum_g",
+    "kp.simple_pendulum",
+    "kp.shm",
+    "kp.linearization",
+    "kp.graph_slope_intercept",
+    "kp.ideal_model",
+    "kp.reaction_time",
+    "kp.multiple_measurements",
     "kp.systematic_error",
     "kp.random_error"
   ],
+  "cause_kps": {
+    "pendulum.random_only": [
+      "kp.random_error",
+      "kp.multiple_measurements"
+    ],
+    "pendulum.top_of_bob": [
+      "kp.pendulum_g",
+      "kp.simple_pendulum",
+      "kp.graph_slope_intercept"
+    ],
+    "pendulum.large_amplitude": [
+      "kp.simple_pendulum",
+      "kp.shm",
+      "kp.ideal_model"
+    ],
+    "pendulum.miscount": [
+      "kp.pendulum_g",
+      "kp.systematic_error",
+      "kp.graph_slope_intercept"
+    ],
+    "pendulum.conical": [
+      "kp.simple_pendulum",
+      "kp.ideal_model"
+    ],
+    "pendulum.timing_offset": [
+      "kp.reaction_time",
+      "kp.pendulum_g",
+      "kp.graph_slope_intercept"
+    ]
+  },
   "relation_family": "sqrt",
   "labsim_id": "pendulum",
-  "yolo_cues": ["string"]
+  "yolo_cues": [
+    "string"
+  ]
 }
