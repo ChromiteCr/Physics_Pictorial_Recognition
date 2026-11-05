@@ -28,7 +28,7 @@
 from pathlib import Path
 
 PROJ_DIR = Path(__file__).resolve().parents[2]  # 仓库根目录（P2 起脚本移到 tools/yolo/）
-DATA_YAML = PROJ_DIR / "data" / "dataset.yaml"
+DATA_YAML = PROJ_DIR / "datasets" / "dataset.yaml"
 RUNS_DIR = PROJ_DIR / "runs"
 
 # ── 训练配置 ──────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ def ensure_absolute_dataset_path():
     相对 yaml 文件所在目录），同样会指向错误位置。唯一稳妥的办法是每次训练前
     都用当前机器的真实路径自动重写这一行，不依赖任何人手动改 yaml。
     """
-    abs_path = str((PROJ_DIR / "data" / "dataset").resolve())
+    abs_path = str((PROJ_DIR / "datasets" / "dataset").resolve())
     lines = DATA_YAML.read_text().split("\n")
     lines = [f"path: {abs_path}" if l.startswith("path:") else l for l in lines]
     DATA_YAML.write_text("\n".join(lines))
@@ -65,7 +65,7 @@ def main():
     ensure_absolute_dataset_path()
 
     # 检查训练集是否有图片
-    train_img_dir = PROJ_DIR / "data" / "dataset" / "images" / "train"
+    train_img_dir = PROJ_DIR / "datasets" / "dataset" / "images" / "train"
     imgs = list(train_img_dir.glob("*.*")) if train_img_dir.exists() else []
     if not imgs:
         print("训练集为空，请先运行 prepare_dataset.py")

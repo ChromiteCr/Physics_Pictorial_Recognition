@@ -31,7 +31,7 @@ from .letters import OTHER_LETTER, experiment_for
 from .som import JPEG_QUALITY, MAX_SIDE, resize_long_side
 
 REPO = Path(__file__).resolve().parents[2]
-SRC_DEFAULT = Path("/Users/billgao/Documents/Coding/SCPKU/Physics-Pictorial-Recognition/Proj/data")
+from ..paths import DATA_ROOT as SRC_DEFAULT  # 完整数据集：仓库 datasets/（gitignore）
 OUT_DEFAULT = REPO / "results" / "recognition"
 PERSON_WEIGHTS = REPO / "assets" / "weights" / "yolov8n.pt"
 PERSON_CONF = 0.4

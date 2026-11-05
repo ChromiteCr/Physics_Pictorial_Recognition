@@ -76,8 +76,7 @@ def _stack(exp: Experiment, observations: Sequence[Observation], grid: CauseGrid
             U = np.broadcast_to(np.asarray(U, dtype=float), (P, n, r, L)).reshape(P, n * r, L)
         else:
             U = np.zeros((P, n * r, 0))
-        sd = np.broadcast_to(exp.total_sd(kind, grid.params, cause_id), (P, 1, r))
-        sd = np.broadcast_to(sd, (P, n, r)).reshape(P, n * r)
+        sd = np.broadcast_to(exp.total_sd_at(kind, settings, grid.params, cause_id), (P, n, r)).reshape(P, n * r)
         vs.append(vals.reshape(-1))
         cs.append(c)
         Us.append(U)

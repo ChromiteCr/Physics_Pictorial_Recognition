@@ -63,7 +63,8 @@ def compute_panel(lin: LinearData, z_crit: float = 2.0, alpha: float = 0.05) -> 
     p = Panel(n=n, sufficient=n >= 3)
     p.slope, p.slope_se = float(a), float(sa)
     p.intercept, p.intercept_se = float(b), float(sb)
-    p.intercept_z = float((b - lin.ideal_intercept) / sb)
+    free_intercept = lin.ideal_intercept is None or not np.isfinite(lin.ideal_intercept)
+    p.intercept_z = NAN if free_intercept else float((b - lin.ideal_intercept) / sb)
     if lin.ideal_slope is not None and lin.ideal_slope != 0:
         p.slope_ratio = float(a / lin.ideal_slope)
         p.slope_ratio_z = float((a - lin.ideal_slope) / sa)
@@ -84,7 +85,7 @@ def compute_panel(lin: LinearData, z_crit: float = 2.0, alpha: float = 0.05) -> 
         p.scatter_p_high = float(stats.chi2.sf(chi2, dof_scatter))
         p.scatter_p_low = float(stats.chi2.cdf(chi2, dof_scatter))
     if n >= 3:
-        if abs(p.intercept_z) > z_crit and "curve_up" not in sig and "curve_down" not in sig:
+        if not free_intercept and abs(p.intercept_z) > z_crit and "curve_up" not in sig and "curve_down" not in sig:
             sig.append("intercept_pos" if p.intercept_z > 0 else "intercept_neg")
         if lin.ideal_slope is not None and abs(p.slope_ratio_z) > z_crit:
             sig.append("slope_high" if p.slope_ratio > 1 else "slope_low")

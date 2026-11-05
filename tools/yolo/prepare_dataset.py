@@ -22,7 +22,7 @@ import shutil
 import random
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"  # P2 起脚本移到 tools/yolo/
+DATA_DIR = Path(__file__).resolve().parents[2] / "datasets"  # P2 起数据在仓库 datasets/（gitignore）
 SOURCES = [DATA_DIR / "self_captured", DATA_DIR / "openclaw", DATA_DIR / "video_frames"]
 DATASET_DIR = DATA_DIR / "dataset"
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}

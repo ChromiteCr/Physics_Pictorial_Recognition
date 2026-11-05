@@ -22,7 +22,7 @@ import cv2
 from pathlib import Path
 
 PROJ = Path(__file__).resolve().parents[2]  # 仓库根目录（P2 起脚本移到 tools/yolo/）
-DEFAULT_DIR = PROJ / "data" / "self_captured"
+DEFAULT_DIR = PROJ / "datasets" / "self_captured"
 OUT_HTML = PROJ / "output" / "label_gallery.html"
 
 # 2026-07-14 起：spring(2)/ruler(4) 从下拉框里去掉（按要求在所有标注代码里忽略

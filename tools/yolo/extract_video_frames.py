@@ -20,8 +20,8 @@ from pathlib import Path
 import cv2
 
 PROJ = Path(__file__).resolve().parents[2]  # 仓库根目录（P2 起脚本移到 tools/yolo/）
-VIDEO_DIR = PROJ / "data" / "video"
-OUT_DIR = PROJ / "data" / "video_frames" / "images"
+VIDEO_DIR = PROJ / "datasets" / "video"
+OUT_DIR = PROJ / "datasets" / "video_frames" / "images"
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
 

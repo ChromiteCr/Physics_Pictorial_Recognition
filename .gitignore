@@ -59,3 +59,6 @@ assets/weights/
 results/
 *.egg-info/
 .pytest_cache/
+
+# 本地完整数据集（照片、视频帧、YOLO 标注），体积大且含原始照片，不进版本库
+datasets/

@@ -278,7 +278,7 @@ class LinearData:
     x_label: str
     y_label: str
     ideal_slope: float | None = None
-    ideal_intercept: float = 0.0
+    ideal_intercept: float | None = 0.0  # None（或 NaN）= 截距自由，面板不检验截距
 
 
 # ── 实验基类 ────────────────────────────────────────────────────────────
@@ -330,6 +330,12 @@ class Experiment:
         """取整之前的高斯噪声标准差，可广播到 (P, 1, r)。散布类原因在子类里覆盖。"""
         return np.array([r.sigma for r in self.obs_kinds[kind].readings], dtype=float)
 
+    def reading_sigma_at(self, kind: str, settings: np.ndarray, params: Mapping[str, np.ndarray],
+                         cause_id: str) -> np.ndarray:
+        """噪声随控制量变化时覆盖这个（可广播到 (P, n, r)）；默认与控制量无关，调用 reading_sigma。"""
+        s = np.asarray(self.reading_sigma(kind, params, cause_id), dtype=float)
+        return s if s.ndim == 3 else s.reshape((1,) * (3 - s.ndim) + s.shape)
+
     def relevant_nuisance(self, cause_id: str, kinds: set[str]) -> tuple[str, ...]:
         """给定原因和已观测的种类，哪些干扰量会影响似然。默认全部；子类可收窄以减小网格。"""
         return tuple(self.nuisance)
@@ -357,6 +363,13 @@ class Experiment:
 
     def total_sd(self, kind: str, params: Mapping[str, np.ndarray], cause_id: str) -> np.ndarray:
         s = np.asarray(self.reading_sigma(kind, params, cause_id), dtype=float)
+        d = self.resolutions(kind)
+        return np.sqrt(s**2 + d**2 / 12.0)
+
+    def total_sd_at(self, kind: str, settings: np.ndarray, params: Mapping[str, np.ndarray],
+                    cause_id: str) -> np.ndarray:
+        """引擎用：随控制量变化的总标准差，可广播到 (P, n, r)。"""
+        s = self.reading_sigma_at(kind, settings, params, cause_id)
         d = self.resolutions(kind)
         return np.sqrt(s**2 + d**2 / 12.0)
 
@@ -397,7 +410,7 @@ class Experiment:
             U = np.broadcast_to(U, (1, n, r, len(lin)))
             theta = np.array([truth["linear"][p.name] for p in lin])
             mean = mean + U @ theta
-        sig = np.broadcast_to(self.reading_sigma(kind, params, truth["cause"]), (1, 1, r))
+        sig = np.broadcast_to(self.reading_sigma_at(kind, settings, params, truth["cause"]), (1, n, r))
         return mean[0], sig[0, 0]
 
     def observe(
