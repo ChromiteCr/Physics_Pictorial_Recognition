@@ -1,0 +1,73 @@
+{
+  "id": "free_fall",
+  "name_zh": "研究自由落体运动（测重力加速度）",
+  "name_en": "Free fall: measuring g with a photogate",
+  "grade": "高中",
+  "goal": "测出小球从静止下落不同高度所用的时间，验证下落高度与时间的平方成正比，并求出重力加速度 g。",
+  "principle": "物体只在重力作用下从静止开始下落的运动叫自由落体运动，它是初速度为零、加速度为 g 的匀加速直线运动，h = ½gt²。电磁铁断电时数字计时器开始计时，小球下沿挡住光电门光束时停止计时，h 是小球下沿到光束的距离。t = √(2/g)·√h：以 √h 为横轴、t 为纵轴描点，图像是一条过原点的直线，斜率等于 √(2/g)，g = 2/斜率²。小钢球密度大、体积小，空气阻力可以忽略；轻球不行。",
+  "formula": "h = ½gt²；t = √(2/g)·√h；g = 2h/t² = 2/斜率²",
+  "variables": [
+    {"symbol": "h", "name": "下落高度（小球下沿到光束）", "unit": "cm", "role": "control"},
+    {"symbol": "t", "name": "下落时间", "unit": "s", "role": "measured"},
+    {"symbol": "g", "name": "重力加速度", "unit": "m/s²", "role": "derived"}
+  ],
+  "apparatus": [
+    "自由落体仪（带刻度的立柱、底座）",
+    "电磁铁及开关",
+    "小钢球",
+    "光电门",
+    "数字计时器（分辨率 0.1 ms）",
+    "刻度尺或立柱刻度（分度值 1 mm）",
+    "重垂线（调立柱竖直）",
+    "接球的软垫或小盒"
+  ],
+  "steps": [
+    "用重垂线把立柱调到竖直，使小球下落时能从光电门的光束中间穿过。",
+    "接通电磁铁电源，吸住小钢球；把光电门固定在立柱上某一高度。",
+    "从小球下沿量到光电门的光束中心（门两臂上小孔的位置），记下下落高度 h。",
+    "断开电磁铁电源，小球由静止下落，读出数字计时器显示的时间 t。",
+    "把光电门依次移到 20、40、60、80、100、120 cm 等高度，每次拧紧后重新读高度，重复测量。",
+    "以 √h 为横轴、t 为纵轴描点作图，求斜率，由 g = 2/斜率² 算出重力加速度，与 9.8 m/s² 比较。"
+  ],
+  "data_table": {
+    "columns": ["序号", "下落高度 h/cm", "√h/√m", "下落时间 t/s", "g = 2h/t² /(m·s⁻²)"]
+  },
+  "safety": [
+    "立柱下方放软垫或接球盒，防止小球弹出伤人或砸坏桌面。",
+    "电磁铁通电时间不要太长，防止线圈发热；接线前先断开电源。"
+  ],
+  "common_causes": [
+    "free_fall.random_only",
+    "free_fall.release_delay",
+    "free_fall.height_to_top",
+    "free_fall.gate_mark",
+    "free_fall.air_drag",
+    "free_fall.gate_scatter"
+  ],
+  "knowledge_points": [
+    "kp.free_fall",
+    "kp.gravity_weight",
+    "kp.uniform_acceleration",
+    "kp.acceleration",
+    "kp.photogate",
+    "kp.ideal_model",
+    "kp.particle_reference_frame",
+    "kp.systematic_error",
+    "kp.random_error",
+    "kp.graph_method",
+    "kp.linearization",
+    "kp.graph_slope_intercept",
+    "kp.scale_reading",
+    "kp.parallax"
+  ],
+  "cause_kps": {
+    "free_fall.release_delay": ["kp.photogate"],
+    "free_fall.height_to_top": ["kp.particle_reference_frame", "kp.scale_reading"],
+    "free_fall.gate_mark": ["kp.photogate", "kp.scale_reading"],
+    "free_fall.air_drag": ["kp.ideal_model", "kp.free_fall"],
+    "free_fall.gate_scatter": ["kp.parallax", "kp.random_error"]
+  },
+  "relation_family": "sqrt",
+  "labsim_id": "free_fall",
+  "yolo_cues": []
+}

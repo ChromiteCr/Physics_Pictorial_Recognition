@@ -1,0 +1,71 @@
+{
+  "id": "average_speed",
+  "name_zh": "测量平均速度",
+  "name_en": "Measuring average speed: cart rolling down a slope",
+  "grade": "初中",
+  "goal": "用刻度尺和停表测出小车沿斜面下滑时通过不同路程的平均速度，比较前后各段的平均速度，认识小车下滑时速度越来越大。",
+  "principle": "平均速度等于路程除以通过这段路程所用的时间，v = s/t。小车从斜面顶端由静止滑下，路程 s 从小车车头量到金属片，时间 t 从松手计到小车撞击金属片。小车下滑时越来越快，所以全程的平均速度大于前半程、小于后半程。进一步看，小车做的是匀加速运动，s = ½at²，即 t 与 √s 成正比：以 √s 为横轴、t 为纵轴描点，图像是一条过原点的直线。",
+  "formula": "v = s/t；后半程 v₃ = (s₁ − s₂)/(t₁ − t₂)；s = ½at²，t = √(2/a)·√s",
+  "variables": [
+    {"symbol": "s", "name": "路程（车头到金属片）", "unit": "cm", "role": "control"},
+    {"symbol": "t", "name": "小车通过这段路程的时间", "unit": "s", "role": "measured"},
+    {"symbol": "v", "name": "平均速度", "unit": "m/s", "role": "derived"},
+    {"symbol": "a", "name": "小车下滑的加速度（拓展）", "unit": "m/s²", "role": "derived"}
+  ],
+  "apparatus": [
+    "长木板（斜面）及垫木",
+    "小车",
+    "金属片（挡板）",
+    "刻度尺（分度值 1 mm）",
+    "停表（分度值 0.01 s）",
+    "可选：光电门和数字计时器、手机慢动作录像"
+  ],
+  "steps": [
+    "用垫木把长木板一端垫起，使斜面保持很小的坡度，让小车下滑得慢一些，便于计时。",
+    "把小车放在斜面顶端，金属片放在斜面下方；用刻度尺从小车车头量到金属片，记下路程 s。",
+    "松手让小车由静止滑下，用停表测出从松手到小车撞击金属片的时间 t；同一位置测 3 次，取平均值。",
+    "把金属片依次移到其他位置（如 25、40、60、80、100、120 cm），重复上面的测量。",
+    "用 v = s/t 算出各段的平均速度；用全程和前半程的数据算出后半程的平均速度，比较前后两段。",
+    "拓展：以 √s 为横轴、平均时间 t 为纵轴描点，看各点是否在一条过原点的直线上。"
+  ],
+  "data_table": {
+    "columns": ["序号", "路程 s/cm", "时间 t₁/s", "时间 t₂/s", "时间 t₃/s", "平均时间 t/s", "平均速度 v/(m·s⁻¹)"]
+  },
+  "safety": [
+    "斜面要放稳，小车滑下时不要用手去接，防止夹手。",
+    "在斜面底端放好金属片挡住小车，防止小车冲出桌面摔坏或砸伤人。"
+  ],
+  "common_causes": [
+    "average_speed.random_only",
+    "average_speed.stop_lag",
+    "average_speed.start_late",
+    "average_speed.start_early",
+    "average_speed.cart_length",
+    "average_speed.pushed",
+    "average_speed.rushed_timing"
+  ],
+  "knowledge_points": [
+    "kp.average_speed",
+    "kp.displacement_distance",
+    "kp.reaction_time",
+    "kp.measurement_error",
+    "kp.systematic_error",
+    "kp.random_error",
+    "kp.multiple_measurements",
+    "kp.scale_reading",
+    "kp.graph_method",
+    "kp.linearization",
+    "kp.uniform_acceleration"
+  ],
+  "cause_kps": {
+    "average_speed.stop_lag": ["kp.reaction_time"],
+    "average_speed.start_late": ["kp.reaction_time"],
+    "average_speed.start_early": ["kp.reaction_time"],
+    "average_speed.cart_length": ["kp.displacement_distance", "kp.scale_reading"],
+    "average_speed.pushed": ["kp.uniform_acceleration"],
+    "average_speed.rushed_timing": ["kp.reaction_time", "kp.random_error"]
+  },
+  "relation_family": "sqrt",
+  "labsim_id": "average_speed",
+  "yolo_cues": ["cart", "track"]
+}
