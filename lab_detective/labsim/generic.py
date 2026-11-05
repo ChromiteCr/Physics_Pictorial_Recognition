@@ -187,6 +187,8 @@ class GenericExperiment(Experiment):
             raise ValueError(f"unknown relation_family {fam}")
         self.family = fam
         q = FAMILY_EXPONENT[fam]
+        if q is None and "exponent" not in spec:
+            raise ValueError("power 关系族需要给出 exponent")
         self.q = float(spec["exponent"]) if q is None else q
         units = spec.get("units", {})
         res = spec.get("resolutions", {})
@@ -529,11 +531,16 @@ class GenericExperiment(Experiment):
 
 
 def spec_from_card(card: Mapping, **overrides) -> dict:
-    """实验卡 → GenericExperiment 的 spec（取第一个 control 变量当 x、第一个 measured 变量当 y）。"""
-    ctrl = next(v for v in card["variables"] if v["role"] == "control")
-    meas = next(v for v in card["variables"] if v["role"] == "measured")
+    """实验卡 → GenericExperiment 的 spec（取第一个 control 变量当 x、第一个 measured 变量当 y）。
+
+    id 默认加前缀 other_，避免原因 id 和手写孪生（如 pendulum.x_offset）撞名。
+    """
+    ctrl = next((v for v in card["variables"] if v["role"] == "control"), None)
+    meas = next((v for v in card["variables"] if v["role"] == "measured"), None)
+    if ctrl is None or meas is None:
+        raise ValueError(f"实验卡 {card.get('id')} 缺少 control 或 measured 变量")
     spec = {
-        "id": card["id"], "name": card["name_zh"], "name_en": card.get("name_en", card["id"]),
+        "id": f"other_{card['id']}", "name": card["name_zh"], "name_en": card.get("name_en", card["id"]),
         "x_var": {"name": ctrl["name"], "symbol": ctrl["symbol"], "unit": ctrl["unit"]},
         "y_var": {"name": meas["name"], "symbol": meas["symbol"], "unit": meas["unit"]},
         "relation_family": card["relation_family"], "ideal_slope": None,

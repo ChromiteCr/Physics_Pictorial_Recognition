@@ -9,8 +9,13 @@ import pytest
 
 from lab_detective.engine import posterior
 from lab_detective.labsim import EXPERIMENTS
-from lab_detective.labsim.generic import GenericExperiment, law_keys, procedural_task_family, spec_from_card
-from lab_detective.labsim.registry import held_out_experiments
+from lab_detective.labsim.generic import (
+    FAMILY_EXPONENT,
+    GenericExperiment,
+    law_keys,
+    procedural_task_family,
+    spec_from_card,
+)
 from lab_detective.panel import compute_panel
 
 pytestmark = pytest.mark.filterwarnings("ignore::scipy.stats.ConstantInputWarning")
@@ -151,10 +156,11 @@ def test_posterior_is_fast():
 def test_spec_from_card_builds_other_experiment_path():
     card = json.loads((Path(__file__).resolve().parents[1] /
                        "lab_detective/knowledge/data/cards/lever.json").read_text(encoding="utf-8"))
-    spec = spec_from_card(card, id="lever_other", x_range=[5.0, 25.0], n_points=5,
+    spec = spec_from_card(card, x_range=[5.0, 25.0], n_points=5,
                           slope_guess=19.6, resolutions={"x": 0.1, "y": 0.1}, sigma={"y": 0.04})
     exp = GenericExperiment(spec)
     assert exp.q == -1 and exp.xv["symbol"] == "L1" and exp.yv["symbol"] == "F1"
+    assert exp.id == "other_lever"
     ds = exp.simulate(np.random.default_rng(9), exp.random_only_id, linear={"slope": 19.6})
     post = posterior(exp, ds)
     assert post.probs.sum() == pytest.approx(1.0)
@@ -203,10 +209,37 @@ def _word_ngrams(text: str, k: int) -> set[tuple[str, ...]]:
     return {tuple(w[i:i + k]) for i in range(len(w) - k + 1)}
 
 
-def test_no_wording_overlap_with_held_out_experiments():
-    """程序化任务族用于训练，措辞不能与留出实验的原因描述重合（中文 8 字、英文 6 词）。"""
-    held = [c for e in held_out_experiments() for c in e.causes]
-    assert held, "注册表里没有留出实验"
+def test_every_card_builds_an_other_path_experiment_without_id_clash():
+    """每张实验卡都能走"其他实验"通道；生成的原因 id 绝不和注册的手写孪生撞名。"""
+    cards = sorted((Path(__file__).resolve().parents[1] / "lab_detective/knowledge/data/cards").glob("*.json"))
+    assert cards
+    registered = {c for e in EXPERIMENTS.values() for c in e.cause_ids()}
+    for path in cards:
+        card = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            spec = spec_from_card(card, x_range=[1.0, 5.0])
+            exp = GenericExperiment(spec)
+        except ValueError:
+            # 只允许"明确不支持"的情况：关系族不在表里、power 缺指数、卡里缺变量
+            assert card["relation_family"] not in FAMILY_EXPONENT or card["relation_family"] == "power" \
+                or not any(v["role"] == "measured" for v in card["variables"])
+            continue
+        assert not set(exp.cause_ids()) & registered, path.name
+    for exp, _ in procedural_task_family(np.random.default_rng(13), 50):
+        assert not set(exp.cause_ids()) & registered
+
+
+def test_bad_spec_raises_value_error():
+    with pytest.raises(ValueError):
+        GenericExperiment({"relation_family": "power"})
+    with pytest.raises(ValueError):
+        GenericExperiment({"relation_family": "exponential"})
+
+
+def test_no_wording_overlap_with_named_experiments():
+    """程序化任务族用于训练，措辞不能照抄 12 个命名实验（尤其留出实验）的原因描述（中文 8 字、英文 6 词）。"""
+    held = [c for e in EXPERIMENTS.values() for c in e.causes]
+    assert len(EXPERIMENTS) >= 6
     zh_ref = set().union(*(_ngrams(c.description_zh + "|" + c.fix_zh, 8) for c in held))
     en_ref = set().union(*(_word_ngrams(c.description_en + " | " + c.fix_en, 6) for c in held))
     for exp, _ in procedural_task_family(np.random.default_rng(12), 200):
