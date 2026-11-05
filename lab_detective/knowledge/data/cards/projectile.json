@@ -1,0 +1,81 @@
+{
+  "id": "projectile",
+  "name_zh": "平抛运动：落地距离与释放高度的关系",
+  "name_en": "Projectile: landing distance vs release height",
+  "grade": "高中",
+  "goal": "让小球从斜槽上不同高度滚下、从水平槽口飞出，测出落地点的水平距离，验证 x² 与释放高度 H 成正比，并由斜率检验小球滚下时的能量转化。",
+  "principle": "小球离开水平槽口后做平抛运动：竖直方向是自由落体，下落高度 h 用时 t = √(2h/g)；水平方向匀速，x = v₀t，所以 x² = v₀²·2h/g。小球沿斜槽滚下时，减少的重力势能 mgH 不全变成向前运动的动能：实心球边滚边转，转动也要占一部分能量，纯滚动时只有 5/7 变成向前运动的动能，v₀² = (10/7)gH。代入得 x² = (20/7)·h·H，g 被约掉。以 H 为横轴、x² 为纵轴作图，理想情况是过原点的直线，斜率等于 (20/7)h。斜槽有摩擦损耗时斜率偏小，小球打滑时斜率偏大，槽口不水平时高处的点偏离更多。",
+  "formula": "t = √(2h/g)；x = v₀t；v₀² = (10/7)gH（实心球纯滚动）；x² = (20/7)hH = 4hH·(5/7)",
+  "variables": [
+    {"symbol": "H", "name": "释放高度（从槽口处球底量起）", "unit": "cm", "role": "control"},
+    {"symbol": "h", "name": "抛出高度（槽口处球底到落点平面）", "unit": "cm", "role": "measured"},
+    {"symbol": "x", "name": "平均落点到 O 点的水平距离", "unit": "cm", "role": "measured"},
+    {"symbol": "x²", "name": "水平距离的平方", "unit": "cm²", "role": "derived"},
+    {"symbol": "v₀", "name": "小球离开槽口的速度", "unit": "m/s", "role": "derived"},
+    {"symbol": "t", "name": "空中飞行时间", "unit": "s", "role": "derived"}
+  ],
+  "apparatus": [
+    "斜槽（末端水平，可固定在桌边）",
+    "实心钢球（直径约 2 cm）",
+    "铁架台（固定斜槽）",
+    "重垂线",
+    "卷尺或米尺（分度值 1 mm）",
+    "白纸、复写纸、胶带",
+    "圆规（画圆找平均落点）",
+    "挡板（固定释放位置，可选）"
+  ],
+  "steps": [
+    "把斜槽固定在桌边，调节槽口水平：把小球放在槽口水平段的任何位置，小球都能静止。",
+    "用重垂线在地面上标出槽口正下方的点 O；用卷尺量出槽口处小球最低点到地面的竖直高度 h。",
+    "在落点附近铺白纸，盖上复写纸，用胶带固定好。",
+    "在斜槽上标出释放高度 H = 5、10、15、20、25、30 cm（都从槽口处小球的最低点量起）。",
+    "从同一高度由静止释放小球 5 次，用尽量小的圆把 5 个落点圈起来，圆心就是平均落点，量出它到 O 点的距离 x。",
+    "换其他高度重复，把 H、x 和 x² 记入表格。",
+    "以 H 为横轴、x² 为纵轴描点作图，把直线的斜率和 (20/7)h 比较，看直线是否过原点。"
+  ],
+  "data_table": {
+    "columns": ["序号", "释放高度 H/cm", "水平距离 x/cm", "x²/cm²"]
+  },
+  "safety": [
+    "小球落地后会弹跳滚动，落点附近不要站人，捡球时注意脚下。",
+    "斜槽和铁架台要夹牢，防止倾倒砸伤。"
+  ],
+  "common_causes": [
+    "projectile.random_only",
+    "projectile.ramp_loss",
+    "projectile.height_wrong",
+    "projectile.end_tilted",
+    "projectile.slipping",
+    "projectile.landing_scatter",
+    "projectile.release_zero"
+  ],
+  "knowledge_points": [
+    "kp.projectile_motion",
+    "kp.motion_composition",
+    "kp.free_fall",
+    "kp.mechanical_energy_conservation",
+    "kp.gravitational_pe",
+    "kp.kinetic_energy",
+    "kp.energy_dissipation",
+    "kp.static_friction",
+    "kp.ideal_model",
+    "kp.linearization",
+    "kp.graph_slope_intercept",
+    "kp.multiple_measurements",
+    "kp.scale_reading",
+    "kp.systematic_error",
+    "kp.random_error"
+  ],
+  "cause_kps": {
+    "projectile.random_only": ["kp.random_error", "kp.multiple_measurements"],
+    "projectile.ramp_loss": ["kp.energy_dissipation", "kp.mechanical_energy_conservation"],
+    "projectile.height_wrong": ["kp.free_fall", "kp.scale_reading", "kp.systematic_error"],
+    "projectile.end_tilted": ["kp.projectile_motion", "kp.motion_composition", "kp.ideal_model"],
+    "projectile.slipping": ["kp.static_friction", "kp.kinetic_energy", "kp.ideal_model"],
+    "projectile.landing_scatter": ["kp.random_error", "kp.multiple_measurements"],
+    "projectile.release_zero": ["kp.gravitational_pe", "kp.zero_adjustment", "kp.graph_slope_intercept"]
+  },
+  "relation_family": "sqrt",
+  "labsim_id": "projectile",
+  "yolo_cues": ["track"]
+}
