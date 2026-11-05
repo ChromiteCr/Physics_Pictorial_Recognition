@@ -9,7 +9,7 @@
 推荐最能区分各原因的下一次测量 → 依据物理事实单讲解，并关联知识点。完全离线，本地小模型。
 
 **自己的创新点**（与格物论文无任何相似；格物是文本题库上的解题辅导 + 代数沙箱 + 投票）：
-1. **误差物理孪生**：12 个中学力学实验的可执行前向模型，带系统误差物理（摩擦、车轮/滑轮转动惯量、绳子质量、遮光片宽度、弹性限度、调零方向……）和仪器噪声模型。
+1. **误差物理孪生**：中学力学实验的可执行前向模型，带系统误差物理（摩擦、车轮/滑轮转动惯量、绳子质量、遮光片宽度、弹性限度、调零方向……）和仪器噪声模型。已精修的课内与留出实验只是起点，其他装置由物理组件（通用关系族 + 通用故障算子，见 `labsim/generic.py`）拼出来。
 2. **可辨识性图谱**（测量物理）：课本标准方案能/不能暴露哪些误差，哪一次追加测量能把它们分开（贝叶斯实验设计）。
 3. **看图建模**：照片 → 装置构型 → 选定实验孪生并实例化参数。
 4. **物理引擎当老师**：模型的主要训练标签来自对含噪数据做贝叶斯逆推断的物理引擎，不是教师模型的解题轨迹。
@@ -40,6 +40,8 @@ lab_detective/
   llm/                      模型客户端（mlx_vlm.server / OpenAI 兼容 API / 脚本化兜底）
   training/                 训练样本生成、蒸馏流水线、打包
   bench/                    物理 bench、识别 bench（生成、冻结、评分）
+    recognition_bench.py    识别 bench：按拍摄时段切分、生成 test.jsonl、打分、规则基线（见 §2.6）
+    review_gallery.py       识别照片审核图册 review.html（学生逐张确认标签，导出 review.json）
 server/                     5090 上的脚本（引导、训练、合并、评测、转 MLX）
 app.py + ui/                Streamlit 界面
 tests/                      pytest，每个模块一个文件
@@ -94,6 +96,30 @@ JSONL，每行：
 - 图片路径相对数据包根目录；图片统一缩放到长边 ≤ 768 px、JPEG 质量 85。
 - `task` 和 `source` 必填；测试集样本绝不进训练包（泄漏检查器按 id 和内容哈希双重检查）。
 - 系统提示：训练时看到的指令必须和推理时一致（蒸馏样本里教师看到的指令也照样放进训练提示）。
+
+### 2.6 识别 bench 与审核图册（bench/recognition_bench.py、bench/review_gallery.py）
+bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.freeze`**。切分间隔、"未知/Z 怎么计分"、主指标都由学生在冻结前定死。
+生成物都在 `results/bench/recognition/`（`results/` 不进版本库）：`split.json`、`test.jsonl`、`images/`（带编号框的测试图）、`detections.jsonl`（YOLO 检测缓存）、`meta.json`；各 arm 的预测和报告放 `results/bench/recognition_runs/<arm>/`。
+
+- **标签由学生本人核实**：`python -m lab_detective.bench.review_gallery` 生成 `results/recognition/review.html`（离线、缩略图内嵌）。
+  页面**没有任何预选**；规则的暂定字母只是提示（规则没有候选时不给字母，暂定 Z 不等于"其他实验"），可开盲审隐藏提示。
+  学生点字母（或键盘 A–L / Z）才算确认；导出的 `review.json` 恰好是 `{"<照片id>": "<字母>"}`，只含确认过的照片。
+  生成 bench 时用 `recognition_bench build --review review.json`；没核实的照片保留暂定标签，并在 `meta.gold_status` 标 `provisional`。
+- **按拍摄时段切分**：拍摄时间依次取 manifest 的 `taken_at`、原图 EXIF（`datasets/` 下的原图；`results/recognition/images/` 里的图不带 EXIF）、文件名时间戳、文件编号相邻。
+  相邻照片间隔 ≤ `gap_s`（默认 1800 s）算同一时段，约 25% 的时段整段进测试集（按首张照片 id 的哈希排序取前 k 个，新增照片不会打乱已有时段）。
+  现有 200 张照片全拍于 29 分钟内，默认间隔只得到 1 个时段，`split` 会拒绝并列出各间隔下的时段数，由学生用 `--gap-s N|auto` 定下来（写进 `split.json.params`）。
+  时段太少时测试集与训练集的相邻照片仍可能是同一场景的连拍，`split.json.nearest_train_gap_s` 记录最近间隔。
+  **训练样本生成必须排除 `split_ids(load_split(), "test")`**，并用 `check_no_overlap` 自查。
+- **`test.jsonl`**：§2.5 的格式，`task=recognize`、`source=photo`、`id=recbench-<照片id>`。messages 由 `vision/prompt.py` 的 `build_messages` 拼，
+  图是带编号框的 `images/<id>.jpg`（编号框来自 YOLO **检测**结果，与推理一致，不是真值框）。assistant 里只有 `letter` 是 gold，`open_name/cues/apparatus` 只是占位。
+  `meta` 含：`photo_id, gold_letter, gold_status(reviewed|provisional), provisional_letter, yolo_split, yolo_seen, session, taken_at, gt_boxes, detections, legend, prompt_hash`。
+- **预测文件**（每个 arm 一份 JSONL）：`{"id": "recbench-…", "text": "<模型原始输出>", "letter_logprobs"?: {"A": -0.1, …}, "letter_probs"?: {…}, "latency_s"?: 1.2}`。
+  缺失的 id、解析不出字母的输出一律算错（所有 arm 都不用约束解码，非法输出照算错）。
+  开放集 AUROC 的正类是 gold 为 Z 的照片，分数是 P(Z)：有 logprobs/概率向量就用它，否则用 `confidence`（预测 Z 取 conf，否则取 1 − conf）。
+- **报告**（`recognition_bench score`）：top-1 + Wilson 区间、每类召回与混淆矩阵、按 `source` 和 `yolo_split` 分层、JSON 合法率、器材 F1（只含 YOLO 词表，仅作参考）、ECE、AUROC（只有一个类时为 null）。
+  **只有 `reviewed` 一栏是证据**；`provisional` 一栏只用来检查流程——暂定标签就是规则对真值框的输出，规则基线在这一栏按构造满分。
+  YOLO 训练时见过这批照片（`yolo_split` 为 train/val），"规则 + 检测框"要按 `yolo_split` 分层看，不和 VLM arm 混成一个数。
+- **规则基线**：`recognition_bench rules` 分别在真值框和检测框上跑 YOLO + 规则，输出完整的概率向量（Z 用虚拟分数），并报告规则"有把握"的覆盖率和准确率。
 
 ## 3. 统一约定
 - 纯 numpy/scipy，不引入新依赖（需要时在 pyproject 里集中加，由主会话处理）。

@@ -59,6 +59,13 @@
 
 按日期倒序，新条目加在最上面。每条写清：日期、改动范围、哪些由 AI 完成。
 
+### 2026-11-05（三）：识别 bench 与审核图册
+
+- AI 新建 `lab_detective/bench/recognition_bench.py`（按拍摄时段切分、生成 test.jsonl、打分、规则基线）、`lab_detective/bench/review_gallery.py`（离线审核图册）、`tests/test_recognition_bench.py`。
+- AI 修改 `docs/ARCHITECTURE.md`（新增 §2.6 识别 bench 接口；创新点 1 的措辞改成"起点而非固定集合"）和 `docs/isef/innovation-and-boundaries.md`（同一处措辞）。
+- 照片标签**不由 AI 贴**：审核图册只给提示，没有预选，`review.json` 只含学生亲手确认的照片；bench 冻结由学生本人运行（AI 未运行 `freeze`）。
+- 未经学生核实：切分间隔（现为 AI 为跑通流程生成的草稿，`split.json` 的 `status` 为 `draft`）、测试集里的 gold 标签（全部是规则暂定值，直到学生导出 `review.json`）。
+
 ### 2026-11-05（二）：README 与本台账
 
 - AI 更新 `README.md`：新增 shields.io 徽章行、「P2：实验侦探」简介段、`uv` 安装说明、新的目录树、移动后的脚本/笔记/权重路径、版本记录新增 P2 行。
