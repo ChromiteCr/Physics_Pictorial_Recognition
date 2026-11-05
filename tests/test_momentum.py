@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from lab_detective.engine import posterior
-from lab_detective.labsim import get_experiment
+from lab_detective.labsim import G as G_ACC, get_experiment
 from lab_detective.labsim.experiments.momentum import Momentum
 from lab_detective.panel import compute_panel
 
@@ -172,3 +172,67 @@ def test_card_is_valid():
     from lab_detective.knowledge import card_errors, load_card
     assert card_errors("momentum") == []
     assert set(load_card("momentum")["common_causes"]) == set(EXP.cause_ids())
+
+
+# ── 独立物理复核补充的回归测试 ─────────────────────────────────────────
+
+
+def test_coast_gate_to_gate_time_carries_entry_timing_error():
+    """单独滑行：T = (D/w)·Δt_in，入口挡光时间的 0.1 ms 误差被放大 40 倍进 T，不能只算米尺量 D 的 2 ms。"""
+    sd = EXP.total_sd("solo_fwd", {"mag": np.zeros((1, 1))}, "momentum.random_only")
+    s_in = 0.1**2 + 0.1**2 / 12.0
+    expect = np.sqrt(2.0**2 + 40.0**2 * s_in + 0.1**2 / 12.0)
+    assert np.ravel(sd)[1] == pytest.approx(expect)
+    assert np.ravel(sd)[1] > 4.5
+
+
+def test_wheel_inertia_reduces_tilt_acceleration():
+    """带轮小车下坡：(m + ΣI/R²)·a = mg·sinθ ⇒ a = g·sinθ·m/(m + ΣI/R²)。"""
+    ex = Momentum(wheel_inertia_g=20.0)
+    tilt = 3.0  # mm/m
+    c, _ = ex.predict("solo_fwd", np.array([20.0]), np.arange(1), {"mag": np.array([[tilt]])},
+                      "momentum.track_tilt")
+    v_in, v_out = 0.01 / 0.020, 0.01 / (c[0, 0, 0] / 1000.0)
+    a = G_ACC * tilt / 1000.0 * 300.0 / 320.0
+    assert v_out**2 - v_in**2 == pytest.approx(2 * a * 0.40, rel=1e-9)
+    # 粘合后两车一起：a = g·sinθ·(m_A + m_B)/(m_A + m_B + 2ΣI/R²)
+    c, _ = ex.predict("main", np.array([20.0]), np.arange(1), {"mag": np.array([[tilt]])}, "momentum.track_tilt")
+    v1 = 0.01 / 0.020
+    vc = np.sqrt(v1**2 + 2 * G_ACC * tilt / 1000.0 * 300.0 / 320.0 * 0.20)
+    v_after = vc * 320.0 / 540.0
+    v2 = np.sqrt(v_after**2 + 2 * G_ACC * tilt / 1000.0 * 500.0 / 540.0 * 0.20)
+    assert c[0, 0, 0] == pytest.approx(1000.0 * 0.01 / v2, rel=1e-9)
+
+
+# 各原因在标准方案下面板上出现过半的特征都必须写进 signatures（散布类不算：大弯曲时二次拟合不够造成的 χ² 偏大）
+@pytest.mark.parametrize("cause,mag,lin", [
+    ("momentum.track_tilt", 0.5, None), ("momentum.track_tilt", -0.5, None),
+    ("momentum.track_tilt", 3.5, None), ("momentum.track_tilt", -3.5, None),
+    ("momentum.friction", 0.0005, None), ("momentum.friction", 0.0035, None),
+    ("momentum.mass_entry", 50.0, None), ("momentum.mass_entry", -50.0, None),
+    ("momentum.timing_offset", None, {"tau": 2.5}), ("momentum.timing_offset", None, {"tau": -2.5}),
+])
+def test_frequent_panel_features_are_declared(cause, mag, lin):
+    rng = np.random.default_rng(13)
+    seen = {}
+    for _ in range(20):
+        for s in compute_panel(EXP.linearise(EXP.simulate(rng, cause, magnitude=mag, linear=lin))).signatures:
+            seen[s] = seen.get(s, 0) + 1
+    frequent = {s for s, k in seen.items() if k >= 10 and not s.startswith("scatter")}
+    assert frequent <= set(EXP.cause(cause).signatures), (frequent, seen)
+
+
+def test_large_friction_bends_down():
+    rng = np.random.default_rng(14)
+    hits = sum("curve_down" in compute_panel(EXP.linearise(EXP.simulate(rng, "momentum.friction", magnitude=0.0035))).signatures
+               for _ in range(20))
+    assert hits >= 15
+
+
+def test_friction_and_uphill_tilt_share_the_posterior():
+    """正向碰撞里摩擦与上坡给出同一个减速度、似然完全相同，谁排第一只由两者的先验密度决定
+    （大 μ 时均匀先验的坡度占优）；引擎至少要把概率集中在这两者上。"""
+    rng = np.random.default_rng(15)
+    for _ in range(10):
+        post = posterior(EXP, EXP.simulate(rng, "momentum.friction", magnitude=0.0035))
+        assert post.prob("momentum.friction") + post.prob("momentum.track_tilt") > 0.95

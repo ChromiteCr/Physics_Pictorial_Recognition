@@ -61,6 +61,9 @@ class Momentum(Experiment):
     # 所有原因共用的线性参数：无（光电门计时偏差是原因自带的线性参数）
     linear = ()
 
+    # 各原因的 signatures 按默认构型（粘合、m_A > m_B、无车轮）的标准方案统计，按主要表现排序。
+    # p' = p ± C/p 型弯曲用直线拟合时斜率与截距反向偏离，弯曲只在幅度大时才显著。
+
     causes = (
         Cause(
             "momentum.random_only", "只有随机误差", "random error only",
@@ -79,7 +82,8 @@ class Momentum(Experiment):
             "导轨一端略高，小车在两个光电门之间运动时，重力沿导轨的分力一直在推它（下坡）或拉它（上坡）。",
             "One end of the track is slightly higher, so the component of gravity along the track keeps "
             "pushing (downhill) or holding back (uphill) the carts between the two gates.",
-            "bend", ("curve_up", "slope_low", "curve_down", "slope_high"),
+            # 下坡 p' ≈ p + C/p：斜率偏小、截距为正、大坡时上弯；上坡相反（大坡时下弯压过截距）
+            "bend", ("slope_low", "intercept_pos", "curve_up", "slope_high", "curve_down", "intercept_neg"),
             magnitude=Prior.sym_uniform(0.3, 4.0, 48),
             magnitude_label_zh="每米导轨的高度差（正 = 沿运动方向下坡）", magnitude_unit="mm/m",
             fix_zh="接通气源后调节导轨底脚螺丝，使单独推出的小车经过两个光电门的挡光时间相等。",
@@ -92,7 +96,8 @@ class Momentum(Experiment):
             "气源风量不够或气孔堵了，滑块局部擦着导轨走（小车则是轴承发涩），从光电门 1 到光电门 2 的一路上一直受摩擦力。",
             "The air supply is weak or some holes are blocked, so the slider rubs on the track (for a "
             "wheeled cart: stiff bearings); friction acts all the way from gate 1 to gate 2.",
-            "bend", ("slope_high",),
+            # 与上坡同一物理：p' ≈ p − C/p，小 μ 时截距为负，μ ≳ 0.002 时下弯
+            "bend", ("slope_high", "intercept_neg", "curve_down"),
             magnitude=Prior.loguniform(0.0003, 0.004, 40),
             magnitude_label_zh="等效动摩擦因数", magnitude_unit="",
             fix_zh="检查气源和气孔，让滑块浮起来；两个光电门尽量靠近碰撞点，推得快一些。",
@@ -134,7 +139,8 @@ class Momentum(Experiment):
             "The photogate sensor responds at different speeds when the beam is blocked and when it "
             "is restored (common in home-made or old photoresistor gates), so every blocking time is "
             "too long (or too short) by the same small amount.",
-            "bend", ("slope_high", "slope_low"),
+            # p' ≈ p + αp²（α ∝ τ）：斜率与截距反向偏离
+            "bend", ("slope_high", "intercept_neg", "slope_low", "intercept_pos"),
             linear=(LinearParam("tau", 0.0, 1.0, "挡光时间的固定偏差", "ms"),),
             fix_zh="换用响应快的光电门，或用两门间时间等独立方法标定计时偏差。",
             fix_en="Use a faster photogate, or calibrate the offset with an independent timing method.",
@@ -221,12 +227,17 @@ class Momentum(Experiment):
 
     # ---- 物理 ----
 
-    def _accel(self, cause_id, mag, direction):
-        """沿运动方向的加速度（m/s²）。direction = +1 正向（A 撞 B 的方向），−1 反向。"""
+    def _accel(self, cause_id, mag, direction, m_g, n_carts=1):
+        """沿运动方向的加速度（m/s²）。direction = +1 正向（A 撞 B 的方向），−1 反向。
+
+        m_g：运动物体的质量（g），n_carts：其中有几辆带轮小车。带轮时沿导轨的力（重力分力、
+        摩擦力 μmg）还要带动轮子转：(m + ΣI/R²)·a = F ⇒ a = (F/m)·m/(m + ΣI/R²)。
+        """
+        frac = m_g / (m_g + n_carts * self.j_wheel)
         if cause_id == "momentum.track_tilt":
-            return direction * G * mag / 1000.0
+            return direction * G * mag / 1000.0 * frac
         if cause_id == "momentum.friction":
-            return -G * mag
+            return -G * mag * frac
         return 0.0
 
     def _after_ratios(self, cause_id, params):
@@ -257,18 +268,19 @@ class Momentum(Experiment):
         w = self.w * (1.0 + mag) if cause_id == "momentum.flag_width" else self.w + 0.0 * mag
         offset = cause_id == "momentum.timing_offset"
         if kind == "main":
-            a = self._accel(cause_id, mag, +1)
             v1 = w / (t_in / 1000.0)
-            vc = self._coast(v1, a, self.d1)
+            vc = self._coast(v1, self._accel(cause_id, mag, +1, self.m_a), self.d1)
+            # 碰后各读数对应的运动物体：粘合 = 两车一起；弹性 = B、A 各自
+            bodies = [(self.m_a + self.m_b, 2)] if self.collision == "sticky" else [(self.m_b, 1), (self.m_a, 1)]
             for i, k in enumerate(self._after_ratios(cause_id, params)):
-                v2 = self._coast(k * vc, a, self.d2)
+                v2 = self._coast(k * vc, self._accel(cause_id, mag, +1, *bodies[i]), self.d2)
                 dt = 1000.0 * w / v2  # ms
                 c[:, :, i] = dt
                 if offset:  # 无加速度时 Δt = (Δt₁ − τ)·q + τ，q = Δt/Δt₁|τ=0 ⇒ ∂Δt/∂τ = 1 − q
                     U[:, :, i, 0] = 1.0 - dt / t_in
             return c, U
         if kind in ("solo_fwd", "solo_rev"):
-            a = self._accel(cause_id, mag, +1 if kind == "solo_fwd" else -1)
+            a = self._accel(cause_id, mag, +1 if kind == "solo_fwd" else -1, self.m_a)
             v_in = w / (t_in / 1000.0)
             v_out = self._coast(v_in, a, self.D)
             c[:, :, 0] = 1000.0 * w / v_out
@@ -298,8 +310,11 @@ class Momentum(Experiment):
             sig = [np.sqrt(COLL_SIGMA**2 + GATE_SIGMA**2 + k**2 * s1) for k in ks]
             return np.stack(np.broadcast_arrays(*sig), axis=-1)  # (P, 1, r) 或 (r,)
         if kind in ("solo_fwd", "solo_rev"):
-            s_out = np.sqrt(2 * GATE_SIGMA**2 + DT_RES**2 / 12.0)
-            return np.array([s_out, T12_SIGMA])
+            # 入口挡光时间当作控制量：T ≈ (D/w)·Δt_in，它的计时误差放大 D/w 倍（默认 40 倍）传进两门间时间
+            s_in = GATE_SIGMA**2 + DT_RES**2 / 12.0
+            s_out = np.sqrt(GATE_SIGMA**2 + s_in)
+            s_t12 = np.sqrt(T12_SIGMA**2 + (self.D / self.w) ** 2 * s_in)
+            return np.array([s_out, s_t12])
         return base
 
     def relevant_nuisance(self, cause_id, kinds):

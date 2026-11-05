@@ -95,7 +95,8 @@ class Projectile(Experiment):
             "斜槽末端没有调水平，小球离开槽口时速度方向略微向上（或向下）。",
             "The end of the ramp is not horizontal, so the ball leaves the lip moving slightly "
             "upwards (or downwards).",
-            "bend", ("slope_high", "slope_low"),
+            # H^{3/2} 项用直线拟合：斜率与截距反向偏离（上倾斜率大、截距负），弯曲一般不显著
+            "bend", ("slope_high", "intercept_neg", "slope_low", "intercept_pos"),
             magnitude=Prior.sym_uniform(0.5, 6.0, 44),
             magnitude_label_zh="槽口倾角（正 = 向上）", magnitude_unit="°",
             fix_zh="把小球放在槽口水平段上，调到它在任何位置都能静止为止。",
@@ -156,8 +157,10 @@ class Projectile(Experiment):
     menu = (
         MenuItem("h_check", "用重垂线和卷尺重新量槽口处球底到落点平面的高度", "re-measure the launch height",
                  2.0, (("h_check", 0.0),)),
-        MenuItem("exit_gate", "在槽口装光电门，测小球（直径 2R）飞出时的挡光时间（H = 10、20 cm 各一次）",
-                 "photogate at the lip: ball blocking time at H = 10 and 20 cm",
+        # 挡光长度按直径 2R 算：光束偏离球心 3 mm（R = 1 cm）弦就短约 5%，算出的 v₀² 偏大约 10%，会被误读成"打滑"
+        MenuItem("exit_gate", "先用游标卡尺量出小球直径；在槽口装光电门、光束对准球心，测小球飞出时的挡光时间（H = 10、20 cm 各一次）",
+                 "caliper the ball diameter; photogate at the lip with the beam through the ball's centre: "
+                 "blocking time at H = 10 and 20 cm",
                  5.0, (("exit_gate", 10.0), ("exit_gate", 20.0))),
         MenuItem("end_level", "用手机水平仪测槽口倾角", "measure the lip angle with a phone level",
                  2.0, (("end_angle", 0.0),)),

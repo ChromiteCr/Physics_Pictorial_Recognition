@@ -135,3 +135,24 @@ def test_dataset_roundtrip():
     from lab_detective.labsim import Dataset
     ds = EXP.simulate(np.random.default_rng(8), "projectile.slipping")
     assert Dataset.from_dict(ds.to_dict()).observations == ds.observations
+
+
+# ── 独立物理复核补充的回归测试 ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize("cause,mag", [
+    ("projectile.end_tilted", 3.0), ("projectile.end_tilted", -3.0),
+    ("projectile.end_tilted", 5.0), ("projectile.end_tilted", -5.0),
+    ("projectile.ramp_loss", 0.15), ("projectile.slipping", 0.5),
+    ("projectile.height_wrong", 3.5), ("projectile.height_wrong", -3.5),
+    ("projectile.release_zero", 2.5), ("projectile.release_zero", -2.5),
+])
+def test_frequent_panel_features_are_declared(cause, mag):
+    """标准方案下面板上出现过半的特征都必须写进 signatures（槽口倾斜：x² 多出 ∝ θH^{3/2} 的项，斜率与截距反向偏离）。"""
+    rng = np.random.default_rng(9)
+    seen = {}
+    for _ in range(20):
+        for s in compute_panel(EXP.linearise(EXP.simulate(rng, cause, magnitude=mag))).signatures:
+            seen[s] = seen.get(s, 0) + 1
+    frequent = {s for s, k in seen.items() if k >= 10 and not s.startswith("scatter")}
+    assert frequent <= set(EXP.cause(cause).signatures), (frequent, seen)
