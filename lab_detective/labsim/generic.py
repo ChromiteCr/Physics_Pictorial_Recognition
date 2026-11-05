@@ -545,6 +545,8 @@ def spec_from_card(card: Mapping, **overrides) -> dict:
         "y_var": {"name": meas["name"], "symbol": meas["symbol"], "unit": meas["unit"]},
         "relation_family": card["relation_family"], "ideal_slope": None,
     }
+    if "exponent" in card:  # power 族的指数（卡片可选字段）
+        spec["exponent"] = card["exponent"]
     spec.update(overrides)
     return spec
 
