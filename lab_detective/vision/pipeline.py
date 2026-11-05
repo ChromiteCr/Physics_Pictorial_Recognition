@@ -5,8 +5,8 @@
         result = answer(result, option_index)
     result = choose_manual(result, "D")            # 学生手动改选，流水线不再改动
 
-model 是任何带 chat(messages, json_schema=..., images=[...]) 方法的对象（lab_detective.llm 的
-ChatModel 接口），返回 {"text": ...} 或字符串。模型调用失败或输出不合法时退回规则结果，不抛异常。
+model 是任何带 chat(messages, json_schema=...) 方法的对象（lab_detective.llm 的 ChatModel 接口；
+图片以训练格式 {"type": "image", "image": 路径} 放在 user 消息里），返回 {"text": ...} 或字符串。模型调用失败或输出不合法时退回规则结果，不抛异常。
 
 澄清问题：从固定题库里选"期望熵减"最大的一题。设待定集合 U 上的先验为 p，
 选项 j 覆盖字母集 S_j（每个字母若出现在 k 个选项里，各以 1/k 的概率被答到；不在任何选项里
@@ -205,7 +205,8 @@ def _call_model(model, image, dets, work_dir) -> RecognitionResult:
     som_path = work / "som.jpg"
     _, legend = draw_marks(image, dets, out_path=som_path)
     messages = build_messages(som_path, legend)
-    resp = model.chat(messages, json_schema=MODEL_OUTPUT_SCHEMA, images=[str(som_path)])
+    # 图片已经以 {"type": "image"} 片段放在消息里（与训练样本同格式），不再另传 images，免得发两遍
+    resp = model.chat(messages, json_schema=MODEL_OUTPUT_SCHEMA)
     text = resp.get("text") if isinstance(resp, dict) else resp
     return parse_model_output(text)
 

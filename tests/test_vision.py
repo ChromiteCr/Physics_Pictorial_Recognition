@@ -252,7 +252,8 @@ def test_pipeline_model_breaks_tie(photo, tmp_path):
     assert not r.needs_question and "pulley" in r.apparatus
     call = fm.calls[0]
     assert call["json_schema"] == schema.MODEL_OUTPUT_SCHEMA
-    assert call["images"] == [str(tmp_path / "som.jpg")] and (tmp_path / "som.jpg").exists()
+    assert not call["images"] and (tmp_path / "som.jpg").exists()  # 图片只在消息里出现一次
+    assert call["messages"][1]["content"][0] == {"type": "image", "image": str(tmp_path / "som.jpg")}
     assert "1 = 小车（cart）" in call["messages"][1]["content"][1]["text"]
     assert schema.validate(r.to_dict()) == []
 

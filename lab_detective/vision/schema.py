@@ -62,6 +62,7 @@ MAX_APPARATUS = 12
 
 # 模型输出的 schema（受约束解码 / API 的 response_format 都用它）
 MODEL_OUTPUT_SCHEMA: dict[str, Any] = {
+    "title": "recognition",
     "type": "object",
     "properties": {
         "letter": {"type": "string", "enum": list(LETTERS)},
