@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 
 from .session import LabSession
-from .templates import BAND_ZH, SIGNATURE_ZH, kp_name
+from .templates import BAND_ZH, KP_MAX, SIGNATURE_ZH, kp_name, rank_kps
 
 SYSTEM_PROMPT_ZH = (
     "你是“实验侦探”，陪中学生做力学实验的探究伙伴。\n"
@@ -96,7 +96,25 @@ def _card_variants(card: dict | None, full: bool) -> list[str]:
     return out
 
 
-def _fact_essentials(fs: dict, phase: str, needs: set[str], kp_names: dict | None, top_n: int) -> dict:
+# 可引用数字里这些条目已在别处出现（嫌疑人、下一次测量、一致性）或只是文字里的数字，不再重复列出
+_DUP_PREFIXES = ("prob.", "prob_pct.", "next.", "agreement.", "cause_name.", "experiment_name", "protocol_label")
+
+
+def _citable(fs: dict, level: int) -> list[str]:
+    """可引用数字，压成 "名字=数值 单位"。level 0 = 去重后全部，1 = 只留前 12 个，2 = 不列。"""
+    if level >= 2:
+        return []
+    out = []
+    for e in fs.get("numbers") or []:
+        name = str(e.get("name", ""))
+        if "[" in name or name.startswith(_DUP_PREFIXES) or e.get("value") is None:
+            continue
+        out.append(f"{name}={_r(e['value'])}" + (f" {e['unit']}" if e.get("unit") else ""))
+    return out[:12] if level == 1 else out
+
+
+def _fact_essentials(fs: dict, phase: str, needs: set[str], kp_names: dict | None, top_n: int,
+                     num_level: int = 0) -> dict:
     out: dict = {}
     ag = fs.get("agreement")
     if ag:
@@ -111,7 +129,8 @@ def _fact_essentials(fs: dict, phase: str, needs: set[str], kp_names: dict | Non
             out["最可能的原因"] = ranked[0].get("name")
     elif ranked:
         out["嫌疑人"] = [
-            {k: v for k, v in (("原因", r.get("name")), ("概率", r.get("prob")), ("证据", r.get("evidence"))) if v}
+            {k: v for k, v in (("原因", r.get("name")), ("概率", r.get("prob")), ("证据", r.get("evidence")))
+             if v not in (None, "")}
             for r in ranked[:top_n]
         ]
         if dg.get("not_in_list"):
@@ -122,12 +141,15 @@ def _fact_essentials(fs: dict, phase: str, needs: set[str], kp_names: dict | Non
     nm = fs.get("next_measurement")
     if nm and "facts_min" not in needs:
         names = {r.get("cause_id"): r.get("name") for r in ranked}
+        rank = {r.get("cause_id"): i for i, r in enumerate(ranked)}
+        preds = sorted(nm.get("predicted") or [], key=lambda p: rank.get(p.get("cause_id"), len(rank)))
         out["下一次测量"] = {
             "名称": nm.get("label"),
             **({"信息增益bit": nm["eig_bits"]} if nm.get("eig_bits") is not None else {}),
             "各原因预测": [
-                {"原因": names.get(p.get("cause_id"), p.get("cause_id")), "值": p.get("value"), "单位": p.get("unit", "")}
-                for p in (nm.get("predicted") or [])[:top_n]
+                {"原因": p.get("name") or names.get(p.get("cause_id"), p.get("cause_id")), "值": p.get("value"),
+                 "单位": p.get("unit", "")}
+                for p in preds[:top_n]
             ],
         }
     elif nm is None and "facts_min" not in needs and ranked:
@@ -136,12 +158,10 @@ def _fact_essentials(fs: dict, phase: str, needs: set[str], kp_names: dict | Non
     if "fix" in needs and fx.get("text"):
         out["修正"] = {k: v for k, v in (("方法", fx.get("text")), ("复测预期", fx.get("predicted_rerun"))) if v}
     if "kp" in needs and fs.get("knowledge_points"):
-        out["知识点"] = [kp_name(k, kp_names) for k in fs["knowledge_points"]]
-    if fs.get("numbers") and "facts_min" not in needs:
-        out["可引用数字"] = [
-            {k: e[k] for k in ("name", "value", "unit", "label", "label_zh") if e.get(k) not in (None, "")}
-            for e in fs["numbers"]
-        ]
+        out["知识点"] = [kp_name(k, kp_names) for k in rank_kps(fs, fs["knowledge_points"])[:KP_MAX]]
+    cite = _citable(fs, num_level) if "facts_min" not in needs else []
+    if cite:
+        out["可引用数字"] = cite
     return out
 
 
@@ -173,7 +193,8 @@ def build_context(
         st = " ".join(student_text.split())
         sections.append((95, "student", [f"【学生刚才说】{st}", f"【学生刚才说】{st[:200]}…"]))
     if needs & {"facts", "facts_min"} and fs:
-        variants = [f"【事实单】{_j(_fact_essentials(fs, phase, needs, kp_names, n))}" for n in (3, 2, 1)]
+        variants = [f"【事实单】{_j(_fact_essentials(fs, phase, needs, kp_names, n, lv))}"
+                    for n, lv in ((3, 0), (2, 0), (2, 1), (1, 1), (1, 2))]
         sections.append((90, "facts", variants))
     if "check" in needs and session.checks:
         c = session.checks[-1]

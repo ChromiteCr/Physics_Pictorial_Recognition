@@ -338,3 +338,18 @@ def test_guarded_explanation(responses, source):
     if len(model.calls) == 2:
         assert "没有通过事实核对" in model.calls[1]["messages"][-1]["content"]
     assert guarded_explanation(None, s, fs, CARD, kp_names=KP, catalog=CAT)["source"] == "template"
+
+
+def test_long_numbers_list_never_hits_hard_cut():
+    """事实单 numbers 很长（facts.py 会登记 40+ 条）时，explain / diagnose 上下文也不应被硬截断。"""
+    fs = make_fs()
+    fs["numbers"] += [{"name": f"data[{i}].extension", "value": 1.0 + i / 7, "unit": "cm"} for i in range(60)]
+    fs["numbers"] += [{"name": f"panel_extra_{i}", "value": 0.123456 * i, "unit": "cm/N"} for i in range(30)]
+    for phase in ("diagnose", "explain"):
+        s = _session_in(phase)
+        user = build_context(s, fs, CARD, budget_chars=3000, kp_names=KP)[1]["content"]
+        assert not user.endswith("…")
+        line = next(x for x in user.split("\n") if x.startswith("【事实单】"))
+        facts = json.loads(line[len("【事实单】"):])
+        assert facts["嫌疑人"][0]["原因"] == "漏算挂钩质量"
+        assert "data[" not in user

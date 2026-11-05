@@ -11,7 +11,7 @@ import re
 
 BLOCK_LIMIT = 120
 BLOCK_KEYS = ("cause", "evidence", "next", "fix", "kp")
-KP_MAX = 5  # 讲解里最多列几个知识点（事实单按相关性排好序）
+KP_MAX = 5  # 讲解里最多列几个知识点（先按与最可能原因的相关性排序，见 rank_kps）
 
 SIGNATURE_ZH = {
     "none": "没有明显异常",
@@ -214,8 +214,25 @@ def block_fix(fs: dict) -> str:
     return compose(parts)
 
 
+def rank_kps(fs: dict, kps: list) -> list:
+    """按与最可能原因的相关性给事实单里的知识点重新排序（只排序、不增删）；知识点模块不可用时保持原顺序。"""
+    ranked = (fs.get("diagnosis") or {}).get("ranked") or []
+    if not ranked or not fs.get("experiment_id") or (fs.get("diagnosis") or {}).get("not_in_list"):
+        return list(kps)
+    try:
+        from .. import knowledge  # 懒加载
+
+        order = knowledge.related_kps(fs["experiment_id"], ranked[0].get("cause_id"))
+    except Exception:  # noqa: BLE001
+        return list(kps)
+    pos = {k: i for i, k in enumerate(order)}
+    key = [k if isinstance(k, str) else (k or {}).get("id") for k in kps]
+    idx = sorted(range(len(kps)), key=lambda i: (pos.get(key[i], len(pos)), i))
+    return [kps[i] for i in idx]
+
+
 def block_kp(fs: dict, kp_names: dict | None = None) -> str:
-    kps = fs.get("knowledge_points") or []
+    kps = rank_kps(fs, fs.get("knowledge_points") or [])
     if not kps:
         return ""
     names = []

@@ -159,3 +159,50 @@ def test_causes_listed_in_next_measurement_are_known():
     assert verify(text, fs, catalog=CAT)["ok"]
     bad = verify("最可能的原因是超出弹性限度，截距 1.52 cm。" + TAIL, fs, catalog=CAT)
     assert "wrong_top_cause" in {p["code"] for p in bad["problems"]}
+
+
+def facts_style_fs():
+    """照 facts.py 的命名习惯手搭的事实单（带点号的名字、中文带括号的一致性量），不导入 facts.py。"""
+    nums = [{"name": "n_points", "value": 5, "unit": ""},
+            {"name": "intercept", "value": -0.012, "unit": "s²"},
+            {"name": "intercept_z", "value": -0.4, "unit": ""},
+            {"name": "slope_ratio", "value": 0.9362, "unit": ""},
+            {"name": "slope_ratio_z", "value": -28.9, "unit": ""},
+            {"name": "agreement.value", "value": 0.9362, "unit": ""},
+            {"name": "agreement.z", "value": -28.9, "unit": ""},
+            {"name": "rerun.slope_ratio", "value": 1.0004, "unit": ""},
+            {"name": "rerun.intercept", "value": 0.0, "unit": "s²"},
+            {"name": "estimate.inv_sqrt_g", "value": 0.31934, "unit": "s/√m"},
+            {"name": "prob.pendulum.miscount", "value": 0.93, "unit": ""},
+            {"name": "prob_pct.pendulum.miscount", "value": 93, "unit": "%"},
+            {"name": "data[0].t10", "value": 12.71, "unit": "s"},
+            {"name": "next.predicted.pendulum.miscount", "value": 19.63, "unit": "s"}]
+    for i in range(40):
+        nums.append({"name": f"data[{i + 1}].t10", "value": 13.0 + i / 10, "unit": "s"})
+    return {
+        "experiment_id": "pendulum", "experiment_name": "用单摆测量重力加速度",
+        "agreement": {"quantity": "斜率比（实测/理论）", "value": 0.9362, "uncertainty": 0.0022, "unit": "",
+                      "z": -28.9, "band": "inconsistent"},
+        "panel": {"signatures": ["slope_low"]},
+        "diagnosis": {"ranked": [{"cause_id": "pendulum.miscount", "name": "全振动次数数错了", "prob": 0.93,
+                                  "evidence": "斜率比 0.9362（z=-28.9，显著）"},
+                                 {"cause_id": "pendulum.conical", "name": "摆球做了圆锥摆运动", "prob": 0.07, "evidence": ""}],
+                      "not_in_list": False, "misfit_p": 0.55},
+        "next_measurement": {"id": "count10", "label": "在 100 cm 处只数 10 次全振动再计时一次", "eig_bits": 0.37,
+                             "predicted": [{"cause_id": "pendulum.miscount", "name": "全振动次数数错了", "value": 19.63, "unit": "s"}]},
+        "fix": {"cause_id": "pendulum.miscount", "text": "摆球第一次经过最低点时数 0 并开始计时",
+                "predicted_rerun": "按修正方法重做，预计斜率比 1.0004（图线应通过原点）"},
+        "knowledge_points": ["kp.pendulum"],
+        "numbers": nums,
+    }
+
+
+@pytest.mark.parametrize("phrase,ok", [("斜率比偏小", True), ("斜率比偏大", False), ("测得的斜率比小于理论值", True),
+                                       ("截距为负", True), ("截距偏大", False)])
+def test_direction_with_facts_style_names(phrase, ok):
+    fs = facts_style_fs()
+    t = f"最可能的原因是全振动次数数错了，斜率比 0.9362（z = -28.9），{phrase}。下一步：在 100 cm 处只数 10 次全振动再计时一次。"
+    r = verify(t, fs, catalog=CAT)
+    assert r["ok"] == ok, r["problems"]
+    if not ok:
+        assert "direction" in {p["code"] for p in r["problems"]}

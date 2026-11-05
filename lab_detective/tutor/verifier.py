@@ -249,6 +249,8 @@ def _entry_sign(e: dict) -> int | None:
     if e.get("z") is not None:
         return _sgn(float(e["z"]))
     name = f"{e.get('name', '')} {e.get('label', '')} {e.get('label_zh', '')}".lower()
+    if str(e.get("name", "")).lower().endswith("_z") or str(e.get("name", "")).lower() == "z":
+        return _sgn(v)  # z 分数本身的正负就是方向（slope_ratio_z 不能按"比值减 1"算）
     if any(k in name for k in _RATIO_NAMES):
         return _sgn(v - 1.0)
     if any(k in name for k in _DEVIATION_NAMES):
@@ -457,10 +459,13 @@ def _alias_refs(text: str, allowed: list[Allowed], fs: dict, unit_spans: list[tu
             if e.get(k):
                 put(normalize(str(e[k])), _entry_sign(e))
     ag = fs.get("agreement") or {}
-    if ag.get("label"):
-        put(normalize(str(ag["label"])), _sgn(_num(ag.get("z")) or 0.0))
+    zsign = _sgn(_num(ag.get("z")) or 0.0)
+    for k in ("label", "quantity"):
+        if ag.get(k) and not str(ag[k]).isascii():
+            put(_core_name(str(ag[k])), zsign)  # "斜率比（实测/理论）" → "斜率比"
     refs: list[_Ref] = []
     for alias, signs in names.items():
+        signs = {x for x in signs if x is not None}  # 判断不了正负的同名量不妨碍判断得了的
         sign = next(iter(signs)) if len(signs) == 1 else None
         if alias.isascii():
             if not re.fullmatch(r"[A-Za-zμ_]+", alias):
