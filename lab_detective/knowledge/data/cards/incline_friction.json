@@ -1,0 +1,65 @@
+{
+  "id": "incline_friction",
+  "name_zh": "斜面上测动摩擦因数",
+  "name_en": "Coefficient of kinetic friction on an incline",
+  "grade": "高中",
+  "goal": "用光电门测出木块沿不同倾角斜面下滑的加速度，用图像法求木块与木板间的动摩擦因数，并检验牛顿第二定律对斜面运动的预测。",
+  "principle": "木块沿斜面下滑时受重力、支持力和滑动摩擦力。沿斜面方向由牛顿第二定律 mg sin θ − μmg cos θ = ma，得 a = g(sin θ − μ cos θ)，与质量无关。两边除以 cos θ 得 a/cos θ = g·tan θ − μg，以 tan θ 为横轴、a/cos θ 为纵轴作图是一条直线，斜率应等于 g，截距等于 −μg。加速度用两个光电门测：v = Δx/t，a = (v_B² − v_A²)/(2d)。",
+  "formula": "a = g(sin θ − μ cos θ)；a/cos θ = g·tan θ − μg；v = Δx/t；a = (v_B² − v_A²)/(2d)；μ = −截距/斜率",
+  "variables": [
+    {"symbol": "θ", "name": "斜面倾角（量角器读数）", "unit": "°", "role": "control"},
+    {"symbol": "t_A, t_B", "name": "遮光片经过光电门 A、B 的挡光时间", "unit": "s", "role": "measured"},
+    {"symbol": "Δx", "name": "遮光片宽度", "unit": "cm", "role": "measured"},
+    {"symbol": "d", "name": "两光电门光线间距", "unit": "cm", "role": "measured"},
+    {"symbol": "a", "name": "木块下滑的加速度", "unit": "m/s²", "role": "derived"},
+    {"symbol": "μ", "name": "动摩擦因数", "unit": "", "role": "derived"}
+  ],
+  "apparatus": [
+    "带量角器、倾角可调的长木板（长约 1 m）",
+    "木块（顶部装宽约 1 cm 的遮光片）",
+    "光电门 2 个及数字计时器（分辨率 0.1 ms）",
+    "游标卡尺",
+    "刻度尺（分度值 1 mm）",
+    "砝码（与木块等质量）"
+  ],
+  "steps": [
+    "用游标卡尺测遮光片宽度 Δx；把两个光电门固定在斜面上，对准光线位置量出间距 d。",
+    "把斜面调到 30°，用刻度尺量斜面顶端高度，用 sin θ = h/L 核对量角器读数。",
+    "让木块摆正，从光电门 A 上方的同一位置由静止释放，记录 t_A、t_B，算出加速度 a；重复 3 次。",
+    "依次把倾角调到 35°、40°、45°、50°，重复上一步。",
+    "以 tan θ 为横轴、a/cos θ 为纵轴描点作图，求斜率和截距：斜率应接近 g，μ = −截距/斜率。",
+    "（检验）在木块上加一个等质量砝码，在 40° 再测 3 次，看加速度是否与质量无关。"
+  ],
+  "data_table": {"columns": ["倾角 θ/°", "t_A/s", "t_B/s", "v_A/(m·s⁻¹)", "v_B/(m·s⁻¹)", "a/(m·s⁻²)（3 次）", "a 平均值/(m·s⁻²)", "tan θ", "a/cos θ/(m·s⁻²)"]},
+  "safety": ["木块滑到底端时要用手或挡板接住，防止摔落砸伤。", "调整倾角后拧紧固定螺丝，防止斜面突然落下夹手。", "光电门的导线不要横在斜面上，以免绊住木块。"],
+  "common_causes": [
+    "incline_friction.random_only",
+    "incline_friction.protractor_zero",
+    "incline_friction.flag_width",
+    "incline_friction.gate_spacing",
+    "incline_friction.mu_load",
+    "incline_friction.release_scatter"
+  ],
+  "knowledge_points": [
+    "kp.incline_forces",
+    "kp.kinetic_friction",
+    "kp.newton_second_law",
+    "kp.force_composition",
+    "kp.photogate",
+    "kp.instantaneous_velocity",
+    "kp.uniform_acceleration",
+    "kp.linearization",
+    "kp.graph_slope_intercept",
+    "kp.systematic_error"
+  ],
+  "cause_kps": {
+    "incline_friction.protractor_zero": ["kp.zero_adjustment", "kp.incline_forces"],
+    "incline_friction.flag_width": ["kp.photogate", "kp.instantaneous_velocity", "kp.relative_error"],
+    "incline_friction.gate_spacing": ["kp.photogate", "kp.uniform_acceleration", "kp.relative_error"],
+    "incline_friction.mu_load": ["kp.kinetic_friction", "kp.ideal_model", "kp.control_variables"],
+    "incline_friction.release_scatter": ["kp.random_error", "kp.multiple_measurements"]
+  },
+  "relation_family": "linear",
+  "labsim_id": "incline_friction",
+  "yolo_cues": ["wooden_block", "track"]
+}

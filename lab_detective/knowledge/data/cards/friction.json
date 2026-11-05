@@ -7,12 +7,38 @@
   "principle": "用弹簧测力计沿水平方向拉木块，使它在水平长木板上做匀速直线运动。木块在水平方向受拉力和滑动摩擦力，二力平衡，测力计示数等于滑动摩擦力。在木块上加钩码改变压力，接触面不变时，滑动摩擦力与压力成正比，F 对 N 的图像是一条过原点的直线。",
   "formula": "f = F（匀速时二力平衡）；f = μN（μ 为动摩擦因数，高中学习）",
   "variables": [
-    {"symbol": "N", "name": "压力（木块与钩码的总重力）", "unit": "N", "role": "control"},
-    {"symbol": "F", "name": "弹簧测力计示数", "unit": "N", "role": "measured"},
-    {"symbol": "f", "name": "滑动摩擦力", "unit": "N", "role": "derived"},
-    {"symbol": "μ", "name": "动摩擦因数（F-N 图像的斜率）", "unit": "", "role": "derived"}
+    {
+      "symbol": "N",
+      "name": "压力（木块与钩码的总重力）",
+      "unit": "N",
+      "role": "control"
+    },
+    {
+      "symbol": "F",
+      "name": "弹簧测力计示数",
+      "unit": "N",
+      "role": "measured"
+    },
+    {
+      "symbol": "f",
+      "name": "滑动摩擦力",
+      "unit": "N",
+      "role": "derived"
+    },
+    {
+      "symbol": "μ",
+      "name": "动摩擦因数（F-N 图像的斜率）",
+      "unit": "",
+      "role": "derived"
+    }
   ],
-  "apparatus": ["长木板", "木块（重约 2 N，带挂钩）", "钩码（每个 1 N）", "弹簧测力计（量程 2.5 N，分度值 0.1 N）", "细线"],
+  "apparatus": [
+    "长木板",
+    "木块（重约 2 N，带挂钩）",
+    "钩码（每个 1 N）",
+    "弹簧测力计（量程 2.5 N，分度值 0.1 N）",
+    "细线"
+  ],
   "steps": [
     "检查弹簧测力计：在水平方向上把指针调到零刻度线。",
     "把长木板平放在水平桌面上，木块放在木板上，用细线连接木块和测力计。",
@@ -21,8 +47,20 @@
     "以 N 为横轴、F 为纵轴描点作图，看图线是否是过原点的直线，并求出斜率。",
     "（改进）把测力计水平固定、拉住木块，抽动下面的木板，再读一组示数比较。"
   ],
-  "data_table": {"columns": ["次数", "钩码个数", "压力 N/N", "测力计示数 F/N", "滑动摩擦力 f/N"]},
-  "safety": ["拉动时不要超过测力计量程。", "钩码要放稳，防止滑落砸伤手脚。", "抽动木板时用力平稳，不要让木板冲出桌面。"],
+  "data_table": {
+    "columns": [
+      "次数",
+      "钩码个数",
+      "压力 N/N",
+      "测力计示数 F/N",
+      "滑动摩擦力 f/N"
+    ]
+  },
+  "safety": [
+    "拉动时不要超过测力计量程。",
+    "钩码要放稳，防止滑落砸伤手脚。",
+    "抽动木板时用力平稳，不要让木板冲出桌面。"
+  ],
   "common_causes": [
     "friction.random_only",
     "friction.zero_vertical",
@@ -32,16 +70,47 @@
     "friction.reading_scatter"
   ],
   "knowledge_points": [
-    "kp.sliding_friction",
-    "kp.balanced_forces",
+    "kp.kinetic_friction",
+    "kp.friction_measurement",
+    "kp.equilibrium_two_force",
     "kp.normal_force",
-    "kp.spring_scale_use",
-    "kp.force_decomposition",
+    "kp.spring_scale",
+    "kp.zero_adjustment",
+    "kp.force_composition",
     "kp.newton_second_law",
     "kp.systematic_error",
-    "kp.graph_method"
+    "kp.graph_method",
+    "kp.graph_slope_intercept"
   ],
   "relation_family": "proportional",
   "labsim_id": "friction",
-  "yolo_cues": ["wooden_block", "dynamometer", "string", "iron_block"]
+  "yolo_cues": [
+    "wooden_block",
+    "dynamometer",
+    "string",
+    "iron_block"
+  ],
+  "cause_kps": {
+    "friction.zero_vertical": [
+      "kp.zero_adjustment",
+      "kp.spring_scale",
+      "kp.gravity_weight"
+    ],
+    "friction.pull_angle": [
+      "kp.force_composition",
+      "kp.normal_force"
+    ],
+    "friction.accelerating": [
+      "kp.newton_second_law",
+      "kp.equilibrium_two_force"
+    ],
+    "friction.board_tilt": [
+      "kp.incline_forces",
+      "kp.force_composition"
+    ],
+    "friction.reading_scatter": [
+      "kp.random_error",
+      "kp.friction_measurement"
+    ]
+  }
 }
