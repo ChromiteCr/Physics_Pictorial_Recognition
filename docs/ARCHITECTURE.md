@@ -39,6 +39,11 @@ lab_detective/
   tutor/                    探究式引导：会话状态机、上下文组装、模板讲解、声明校验器
   llm/                      模型客户端（mlx_vlm.server / OpenAI 兼容 API / 脚本化兜底）
   training/                 训练样本生成、蒸馏流水线、打包
+    prompts.py              提示词的唯一来源（训练、蒸馏、bench、推理共用）+ 输出 JSON schema（见 §2.7）
+    splits.py               训练/留出实验、每个训练实验扣下的原因、种子命名空间、训练/验证划分
+    tasks_diagnose.py       诊断样本（含"自己提出原因"变体）；tasks_design.py 实验前规划；
+    tasks_explain.py        事实单讲解（3 种措辞/槽位，必须过校验器）；tasks_knowledge.py 知识点问答
+    generate.py             命令行：多进程生成 results/{train,val}/<任务>.jsonl
   bench/                    物理 bench、识别 bench（生成、冻结、评分）
     recognition_bench.py    识别 bench：按拍摄时段切分、生成 test.jsonl、打分、规则基线（见 §2.6）
     review_gallery.py       识别照片审核图册 review.html（学生逐张确认标签，导出 review.json）
@@ -96,6 +101,7 @@ JSONL，每行：
 - 图片路径相对数据包根目录；图片统一缩放到长边 ≤ 768 px、JPEG 质量 85。
 - `task` 和 `source` 必填；测试集样本绝不进训练包（泄漏检查器按 id 和内容哈希双重检查）。
 - 系统提示：训练时看到的指令必须和推理时一致（蒸馏样本里教师看到的指令也照样放进训练提示）。
+- 引擎标注的四类文本样本（diagnose / design / explain / knowledge）怎么生成、提示里放什么、目标 JSON 长什么样，见 §2.7。
 
 ### 2.6 识别 bench 与审核图册（bench/recognition_bench.py、bench/review_gallery.py）
 bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.freeze`**。切分间隔、"未知/Z 怎么计分"、主指标都由学生在冻结前定死。
@@ -121,6 +127,39 @@ bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.free
   **只有 `reviewed` 一栏是证据**；`provisional` 一栏只用来检查流程——暂定标签就是规则对真值框的输出，规则基线在这一栏按构造满分。
   YOLO 训练时见过这批照片（`yolo_split` 为 train/val），"规则 + 检测框"要按 `yolo_split` 分层看，不和 VLM arm 混成一个数。
 - **规则基线**：`recognition_bench rules` 分别在真值框和检测框上跑 YOLO + 规则，输出完整的概率向量（Z 用虚拟分数），并报告规则"有把握"的覆盖率和准确率。
+
+### 2.7 引擎标注的训练样本（training/prompts.py、splits.py、tasks_*.py、generate.py）
+所有标签都由确定性代码给出（贝叶斯引擎、EIG、孪生、不确定度预算、可辨识性图谱、知识点图谱），没有人工标签、API 输出或学生数据。
+
+- **提示的唯一来源**：`training/prompts.py`（`PROMPT_VERSION = "lab-v1"`，改提示必须升版本）。训练、蒸馏、bench、推理都调
+  `build_diagnose_messages / build_design_messages / build_explain_messages / build_knowledge_messages`，返回 `[system, user]`；
+  system 一律是 `tutor/context.py` 的 `SYSTEM_PROMPT_ZH`。讲解提示就是 `build_context(..., phase="explain")`，与 `tutor/policy.guarded_explanation` 推理时完全相同。
+- **诊断 / 设计提示只放观测量**：实验卡要点（名称、目的、公式、变量；程序化实例按关系族现场生成）、数据表（照学生记录的样子）、
+  面板数字（与事实单同一套取整，讲解引用的数字都能在提示里找到）、一致性的数值和 z、候选原因的名称 + 物理描述（编号 `C1…` 每条样本随机打乱）、
+  追加测量菜单（编号 `M1…` 随机打乱，附用时和会得到的读数）。**不放**：原因的预期特征、面板判出的特征、后验概率、EIG、一致性结论。
+  特征词表、机制词表和输出格式是所有样本共用的固定文字（`prompts.fixed_blocks()`），不带样本信息。
+- **输出 schema**（`prompts.SCHEMAS`；`prompts.validate_output(variant, obj)` 检查 schema 和 explanation ≤ 80 字）：
+  - `diagnose`：`{"signatures": [特征词], "evidence": "证据句", "ranked": [{"cause_id": "C3", "prob": 0.7, "expect": [特征词]}, …], "not_in_list": false,
+    "next_measurement": {"id": "M2", "predicted": [{"cause_id", "value", "unit"}（前两名原因）]} | null, "agreement": "consistent|tension|inconsistent" | null, "explanation": "≤ 80 字"}`。
+    ranked 列出全部候选，按未取整的后验从大到小，prob 取 0.05 的倍数；expect = 原因在标准方案下的预期特征；第一个 `cause_id` 就是最可能的原因（打乱标签对照据此统计）。
+  - `propose`（不给候选清单）：ranked 换成 `[{"name", "mechanism", "expect", "prob"}]`（引擎排名前 6），predicted 用 `name`，没有 `not_in_list`。
+  - `design`：`{"expected": [{"setting", "value", "sd", "unit"}], "dominant_source": {"reading", "type": "random|resolution"},
+    "recommend": {"n_points", "range": [最小, 最大], "unit", "repeat_each"}, "unresolved": [{"pair": ["C1", "C4"], "status": "confused|partial", "measurement": "M2" | null}], "explanation"}`。
+    提示里给孪生预期读数和标准方案下斜率的相对不确定度（引擎算好），不给不确定度份额和图谱结果。
+  - `knowledge`：`{"knowledge_points": [{"id", "name"}], "prerequisites": [{"id", "name"}], "answer": "≤ 80 字"}`。
+  - `explain`：纯中文 ≤ 120 字（原因、数值证据、下一次测量及前两名原因的预测值、修正），每个槽位 3 种措辞，**必须通过 `tutor/verifier.verify`**，过不了就丢弃。
+- **划分（`splits.py`）**：训练 / 留出实验完全按注册表的 `held_out`；留出实验的任何内容都不进训练数据。每个训练实验扣下一个原因
+  （`WITHHELD_CAUSES`：`average_speed.cart_length`、`energy.wheel_inertia`、`friction.zero_vertical`、`hooke.total_length`、`momentum.friction`、`newton2.heavy_hanging`，
+  理由见 `WITHHELD_REASONS_ZH`），它不用来模拟、不进候选清单和引擎原因集、不进知识问答，留给"已知实验里的新原因"测试。
+  每条样本的种子 = `SeedSequence(基础种子, 任务, 划分, 序号)`；验证集 = 独立命名空间、总数的 5%；`SPLIT_CODES["bench"]` 留给冻结测试集，生成器从不使用。
+- **诊断配比**：程序化任务族 50%（`labsim/generic.py`）+ 训练实验 50%；方案 单次 15% / 标准 60% / 标准 + 1 项追加测量 25%；真实原因约 25% 是"只有随机误差"；
+  20% 是 propose 变体；8% 是"真实原因不在清单里"（目标照样来自引擎）。EIG 用 `n_samples = 64`。设计任务里程序化实例占 70%。
+- **meta**：`experiment_id`（训练实验 id 或 `proc_<定律>`）、`split`、`seed`、`variant`、`schema`、`protocol`、`truth_cause`、`top_cause`、
+  `causes`（`[{"id": 显示编号, "name": 中文名}]`，打乱标签对照按它置换）、`id_map`（显示编号 → 真实原因 id）、`menu_map`、`explanation_verified`、`prompt_version`。
+- **生成**：`python -m lab_detective.training.generate --n-diagnose N --n-design N --n-explain N --n-knowledge N --workers 6`
+  → `results/train/<任务>.jsonl`、`results/val/<任务>.jsonl`、`results/generate_report.json`（条数、丢弃数、吞吐）。每个 `--n` 是训练 + 验证的总数；
+  输出与进程数无关，逐字节可复现。Mac 上 6 进程实测：诊断约 114 条/秒（单进程约 26）、设计约 14 条/秒（单进程约 3.7，图谱是大头）、
+  讲解约 136 条/秒、知识问答题库约 500 题（用完即止）。
 
 ## 3. 统一约定
 - 纯 numpy/scipy，不引入新依赖（需要时在 pyproject 里集中加，由主会话处理）。

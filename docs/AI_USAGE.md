@@ -50,6 +50,7 @@
 | `local_llm.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
 | `watchdog.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
 | `app.py`（P2 新增 UI 部分） | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
+| `lab_detective/training/prompts.py`、`splits.py`、`tasks_diagnose.py`、`tasks_design.py`、`tasks_explain.py`、`tasks_knowledge.py`、`generate.py`；`tests/test_training_tasks.py` | AI（2026-11-05） | GPT 代理（未核实是否已审） | 已完成代码与测试；扣下原因的选择待学生确认 |
 | 研究计划 | 学生本人 | — | 学生本人完成（进度未核实） |
 | 手推原因特征 | 学生本人 | — | 学生本人完成（进度未核实） |
 | 亲手实现的故障模型（胡克零点偏移） | 学生本人 | — | 学生本人完成（进度未核实） |
@@ -58,6 +59,15 @@
 ## 3. 变更日志
 
 按日期倒序，新条目加在最上面。每条写清：日期、改动范围、哪些由 AI 完成。
+
+### 2026-11-05（四）：引擎标注的训练样本生成器
+
+- AI 新建 `lab_detective/training/prompts.py`（提示词唯一来源和输出 schema）、`splits.py`（训练/留出划分、每个训练实验扣下一个原因、种子命名空间）、
+  `tasks_diagnose.py`、`tasks_design.py`、`tasks_explain.py`、`tasks_knowledge.py`、`generate.py`（多进程命令行）和 `tests/test_training_tasks.py`。
+- AI 修改 `docs/ARCHITECTURE.md`：目录表补这些模块，新增 §2.7（提示内容、输出 schema、划分、配比、生成命令和实测吞吐）。
+- 样本标签全部来自确定性代码（引擎、EIG、孪生、不确定度预算、图谱、知识点图谱），生成过程不调用任何模型或 API。
+- 待学生确认：6 个扣下的原因（`splits.WITHHELD_CAUSES`，AI 按"物理上值得考、能和随机误差分开、名称唯一"挑的）；诊断和设计的配比、
+  设计任务里"相对不确定度超过 5% 时点数加倍"这条规划规则（AI 定的工程默认值，不是研究结论）。
 
 ### 2026-11-05（三）：识别 bench 与审核图册
 
