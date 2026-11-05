@@ -174,7 +174,7 @@ def _sig_word(z) -> str:
 def _evidence(cause, p: Panel, t: dict, units: dict, ideal_slope) -> str:
     """按原因对应的面板量写证据（只引用面板数字，不写原因的"标准特征"标签）。"""
     if not p.sufficient:
-        return "数据点少于 3 个，面板无法判断"
+        return "数据点太少，面板无法判断"
     sigs = [s for s in cause.signatures if s != "none"]
     parts: list[str] = []
     seen: set[str] = set()
@@ -194,7 +194,7 @@ def _evidence(cause, p: Panel, t: dict, units: dict, ideal_slope) -> str:
             if t["curvature_z"] is not None:
                 parts.append(f"曲率 z={t['curvature_z']}（{_sig_word(p.curvature_z)}）")
             else:
-                parts.append("数据点少于 4 个，无法检验弯曲")
+                parts.append("数据点太少，无法检验弯曲")
         elif q == "scatter" and t["chi2_dof"] is not None:
             if s == "scatter_deficit":
                 pv, word = t["scatter_p_low"], "偏小"
@@ -207,7 +207,7 @@ def _evidence(cause, p: Panel, t: dict, units: dict, ideal_slope) -> str:
             if t["drift_rho"] is not None:
                 parts.append(f"残差随试次的秩相关 ρ={t['drift_rho']}（p={t['drift_p']}）")
             else:
-                parts.append("数据点少于 5 个，无法检验漂移")
+                parts.append("数据点太少，无法检验漂移")
     if parts:
         return "；".join(parts)
     if cause.mechanism == "none":
@@ -379,7 +379,7 @@ def _fix(exp: Experiment, ds: Dataset, post, top: str, units: dict, nums: Number
     else:
         ideal = nums.add("rerun.ideal_intercept", lin.ideal_intercept, units["y"], dec=di)
         ideal_txt = f"理论截距 {with_unit(ideal, units['y'])}"
-    out["predicted_rerun"] = f"改正后按原方案重做，预计截距 {with_unit(f'{b} ± {ub}', units['y'])}（{ideal_txt}），{slope_txt}。"
+    out["predicted_rerun"] = f"按修正方法重做，预计截距 {with_unit(f'{b} ± {ub}', units['y'])}（{ideal_txt}），{slope_txt}。"
     return out
 
 

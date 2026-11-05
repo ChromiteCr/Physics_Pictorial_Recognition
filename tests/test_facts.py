@@ -162,7 +162,7 @@ def test_single_reading_hides_band(fake):
     fs = build_fact_sheet(EXP, _sim("hooke.random_only", 4, protocol="single"))
     json.dumps(fs, allow_nan=False, ensure_ascii=False)
     assert fs["agreement"]["band"] is None
-    assert all("少于 3 个" in r["evidence"] for r in fs["diagnosis"]["ranked"])
+    assert all("数据点太少" in r["evidence"] for r in fs["diagnosis"]["ranked"])
 
 
 def test_cause_subset_and_aux_rows(fake):

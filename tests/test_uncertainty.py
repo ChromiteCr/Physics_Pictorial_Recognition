@@ -100,3 +100,35 @@ def test_slope_units():
     assert slope_unit("1/L1 (1/m)", "拉力 F (N)") == "N·m"
     assert slope_unit("理论 (J/kg)", "实测 (J/kg)") == ""
     assert slope_unit("拉力 F (N)", "加速度 a (m/s²)") == "(m/s²)/N"
+
+
+R3 = tuple(Reading(f"t{i}", f"时间第 {i} 次", f"time #{i}", "s", resolution=0.0, sigma=0.05) for i in (1, 2, 3))
+
+
+class Toy3(Toy):
+    """同一位置测 3 次、取平均：三个读数地位完全相同，份额应各占 1/3。"""
+
+    id = "toy3"
+    causes = (Cause("toy3.random_only", "只有随机误差", "random only", "", "", "none", ("none",)),)
+    obs_kinds = {"main": ObsKind("main", "计时 3 次", "time x3", R3, setting_unit="m")}
+
+    def predict(self, kind, settings, order, params, cause_id):
+        P, n = params["mag"].shape[0], settings.size
+        U = np.zeros((P, n, 3, 1))
+        U[:, :, :, 0] = settings[None, :, None]
+        return np.zeros((P, n, 3)), U
+
+    def linearise(self, ds):
+        x = np.array([o.setting for o in ds.observations])
+        y = np.array([np.mean(o.values) for o in ds.observations])
+        return LinearData(x, y, np.full(x.shape, 0.05 / math.sqrt(3)), np.arange(x.size),
+                          "距离 s (m)", "时间 t (s)", None, 0.0)
+
+
+def test_identical_readings_get_equal_shares():
+    b = budget(Toy3(), n=400, rng=np.random.default_rng(2))
+    sa, _ = _wls_oracle(np.arange(1.0, 6.0), 0.05 / math.sqrt(3))
+    assert b["slope"]["sd"] == pytest.approx(sa, rel=0.12)
+    shares = [it["share"] for it in b["slope"]["sources"]]
+    assert len(shares) == 3 and all(it["type"] == "random" for it in b["slope"]["sources"])
+    assert all(abs(s - 1 / 3) < 0.06 for s in shares), shares

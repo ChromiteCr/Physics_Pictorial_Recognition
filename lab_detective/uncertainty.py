@@ -2,7 +2,8 @@
 
 budget：在名义参数（先验均值）、"只有随机误差"的条件下，按方案蒙特卡洛模拟 n 组数据，
 用特征面板的直线拟合求斜率和截距，报告它们的标准差，以及每个读数的"分辨率"和"随机误差"
-各贡献多少（逐个关掉一个来源，看方差减少多少）。
+各贡献多少。来源相互独立、方差可加，所以"关掉来源 i 时方差的减少量"等于"只开来源 i 时的方差"；
+实现用后者：直接估计、没有样本协方差带来的噪声（几个完全相同的读数不会被排出假的主次）。
 
 取整的处理（重要）：名义参数是固定的，若直接取整，没有噪声时每次结果都一样，分辨率的贡献会算成 0。
 实际上学生并不知道真值落在刻度的哪个位置，所以每组模拟给真值加一个在 ±d/2 内均匀分布的随机相位，
@@ -175,19 +176,19 @@ def budget(exp: Experiment, protocol="standard", n: int = 400, rng: np.random.Ge
         return fits
 
     on = np.ones(m.size, bool)
+    off = np.zeros(m.size, bool)
     full = run(on, on)
     var_full = np.nanvar(full, axis=0, ddof=1)
-    # 逐个关掉一个来源（某读数的 σ 或 d），方差的减少量 = 这个来源的贡献
-    contribs = []  # (来源序号, 类型, 方差减少 (2,))
+    # 每个来源（某读数的 σ 或 d）单独打开，其余全关：这时的方差就是它的贡献
+    contribs = []  # (来源序号, 类型, 方差 (2,))
     for si, src in enumerate(sources):
         mask = np.array([src_of[q] == (src["kind"], src["reading"]) for q in range(m.size)])
         for typ, val in (("random", src["sigma"]), ("resolution", src["resolution"])):
             if val <= 0:
                 continue
-            sig_on = on & ~mask if typ == "random" else on
-            res_on = on & ~mask if typ == "resolution" else on
-            v_off = np.nanvar(run(sig_on, res_on), axis=0, ddof=1)
-            contribs.append((si, typ, np.maximum(var_full - v_off, 0.0)))
+            sig_on = mask if typ == "random" else off
+            res_on = mask if typ == "resolution" else off
+            contribs.append((si, typ, np.nanvar(run(sig_on, res_on), axis=0, ddof=1)))
 
     xu_label, yu = lin0.x_label, unit_of(lin0.y_label)
     units = {"slope": slope_unit(xu_label, lin0.y_label), "intercept": yu}
@@ -219,7 +220,14 @@ def budget(exp: Experiment, protocol="standard", n: int = 400, rng: np.random.Ge
         }
     out["sources"] = sources
     s = out["slope"]
-    top = "、".join(f"{it['label_zh']}（{it['share'] * 100:.0f}%）" for it in s["sources"][:2] if it["share"] > 0)
+    # 按类型汇总（几个地位相同的读数之间的排序只是蒙特卡洛起伏，不单独点名）
+    by_type = {"random": 0.0, "resolution": 0.0}
+    for it in s["sources"]:
+        by_type[it["type"]] += it["share"]
+    top = "、".join(f"{lab}约占 {by_type[k] * 100:.0f}%" for k, lab in (("random", "随机读数误差"), ("resolution", "读数分辨率"))
+                   if by_type[k] >= 0.005)
+    if s["sources"] and s["sources"][0]["share"] > 0.5 and len(sources) > 1:
+        top += f"，其中最大的一项是{s['sources'][0]['label_zh']}"
     rel = f"，相对 {s['rel_sd'] * 100:.1f}%" if s["rel_sd"] is not None else ""
     it = out["intercept"]
     slope_txt = with_unit(f"{s['nominal']:.4g}", s["unit"])
@@ -227,6 +235,6 @@ def budget(exp: Experiment, protocol="standard", n: int = 400, rng: np.random.Ge
     isd_txt = with_unit(f"{it['sd']:.2g}", it["unit"])
     out["summary_zh"] = (
         f"按「{plabel}」测量，斜率预计 {slope_txt}，标准不确定度约 {sd_txt}{rel}；截距的标准不确定度约 {isd_txt}。"
-        + (f"主要来源：{top}。" if top else "")
+        + (f"来源：{top}。" if top else "")
     )
     return out
