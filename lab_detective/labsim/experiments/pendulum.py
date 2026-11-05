@@ -260,6 +260,8 @@ class Pendulum(Experiment):
                 k = _period_factor(np.radians(mag))
             cone = 1.0
             if cause_id == CONICAL and kind != "careful":
+                # 圆锥摆周期精确为 2π√(L cosα/g)，不再叠加平面摆 5° 的摆角修正 K_STD
+                k = 1.0
                 cone = np.sqrt(np.cos(np.radians(mag)))
             m = mag if cause_id == MISCOUNT else 0.0
             # t = (N + m)·2π√(L_eff)·K·√cosα·(1/√g) + τ

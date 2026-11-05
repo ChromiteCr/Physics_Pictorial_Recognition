@@ -171,3 +171,42 @@ def test_dataset_roundtrip():
     from lab_detective.labsim import Dataset
     ds = EXP.simulate(np.random.default_rng(11), "energy.push")
     assert Dataset.from_dict(ds.to_dict()).observations == ds.observations
+
+
+def _newton_dt_ms(h_true_m, theta_deg, d_m, mu=0.0, eps=0.0, v0=0.0):
+    """独立核对（用牛顿第二定律，不用能量守恒）：沿轨道 (M + I/r²)s̈ = Mg sinθ − μMg cosθ，
+    遮光片中心到光电门时 s_g = h/sinθ，挡光从前沿到 s_g − d/2 到后沿过 s_g + d/2。"""
+    th = math.radians(theta_deg)
+    a = 9.8 * (math.sin(th) - mu * math.cos(th)) / (1.0 + eps)
+    sg = h_true_m / math.sin(th)
+
+    def t(s):
+        return (-v0 + math.sqrt(v0 * v0 + 2 * a * s)) / a
+    return (t(sg + d_m / 2) - t(sg - d_m / 2)) * 1000.0
+
+
+@pytest.mark.parametrize("theta", [12.0, 30.0])
+@pytest.mark.parametrize("h", [5.0, 15.0, 25.0])
+def test_predicted_gate_time_matches_newtonian_kinematics(h, theta):
+    def pred(cause, kind="main", mag=0.0, lin=None):
+        truth = {"cause": cause, "magnitude": mag, "nuisance": {"theta_deg": theta},
+                 "linear": {p.name: (lin or {}).get(p.name, p.mean) for p in EXP.linear_params(cause)}}
+        mean, _ = EXP._mean_and_sigma(truth, kind, np.array([h]), np.array([0]))
+        return float(mean[0, 0])
+
+    s = math.sin(math.radians(theta))
+    cases = [
+        (pred("energy.random_only"), _newton_dt_ms(h / 100, theta, 0.010)),
+        (pred("energy.flag_width", lin={"w_true": 10.0, "w_err": 0.6}), _newton_dt_ms(h / 100, theta, 0.0106)),
+        (pred("energy.slant_length"), _newton_dt_ms(h / 100 * s, theta, 0.010)),
+        (pred("energy.track_friction", mag=0.02), _newton_dt_ms(h / 100, theta, 0.010, mu=0.02)),
+        (pred("energy.wheel_inertia", mag=0.06), _newton_dt_ms(h / 100, theta, 0.010, eps=0.06)),
+        (pred("energy.wheel_inertia", "loaded", mag=0.06), _newton_dt_ms(h / 100, theta, 0.010, eps=0.06 * 0.3 / 0.8)),
+        (pred("energy.wrong_height_point", mag=3.0), _newton_dt_ms((h - 3.0) / 100, theta, 0.010)),
+        (pred("energy.push", mag=0.5), _newton_dt_ms(h / 100, theta, 0.010, v0=0.5)),
+        (pred("energy.push", "string_release", mag=0.5), _newton_dt_ms(h / 100, theta, 0.010)),
+    ]
+    for p, exact in cases:
+        # 唯一差别是"挡光平均速度 ≠ 中心速度"的 (aΔt/2)² 小量：远小于 0.1 ms 取整
+        assert abs(p - exact) < 0.04
+    assert cases[0][0] == pytest.approx(cases[0][1], rel=4e-4)  # 标准方案本身 ≤ 3×10⁻⁴
