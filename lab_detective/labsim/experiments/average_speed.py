@@ -186,7 +186,8 @@ class AverageSpeed(Experiment):
             "小车实际跑过的路程比记录的少了一个车身长。",
             "The distance was measured from the cart's rear to the stopper, but the cart stops when "
             "its front hits the stopper, so it actually travels one cart length less.",
-            "x_offset", ("curve_down", "intercept_neg"),
+            # 停表 σ 下弯曲通常不够显著，面板主要看到截距为负；弯曲只在大车长时才显出来
+            "x_offset", ("intercept_neg", "curve_down"),
             magnitude=Prior.uniform(4.0, 15.0, 111),
             magnitude_label_zh="车身长", magnitude_unit="cm",
             fix_zh="路程从车头量到金属片（起点和终点都对准车头）。",
@@ -200,7 +201,8 @@ class AverageSpeed(Experiment):
             "放车时手顺势往前推了一下，小车一出发就带着一定的速度，而不是从静止开始运动。",
             "The cart was given a small push at release, so it starts with some speed instead of "
             "from rest.",
-            "bend", ("curve_up", "intercept_neg"),
+            # 6 个位置 + 停表 σ 时弯曲多半检测不出，面板主要看到截距为负（弯曲是真实的，只是偏小）
+            "bend", ("intercept_neg", "curve_up"),
             magnitude=Prior.loguniform(1.0, 60.0, 161),
             magnitude_label_zh="等效助跑距离 v0²/(2a)", magnitude_unit="cm",
             fix_zh="用挡板挡住小车，竖直抽走挡板放车，保证从静止出发。",

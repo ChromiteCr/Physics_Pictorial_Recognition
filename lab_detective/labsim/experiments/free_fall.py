@@ -149,7 +149,7 @@ class FreeFall(Experiment):
             "The height was measured from the magnet face (the top of the ball) or the ball's centre, "
             "but the timer stops when the ball's bottom reaches the beam, so the ball actually falls "
             "a little less than recorded.",
-            "x_offset", ("slope_high", "intercept_neg", "curve_down"),
+            "x_offset", ("slope_high", "curve_down", "intercept_neg"),
             magnitude=Prior.uniform(0.5, 3.0, 121),
             magnitude_label_zh="多记的高度", magnitude_unit="cm",
             fix_zh="从小球下沿量到光电门的光束中心。",
@@ -206,7 +206,7 @@ class FreeFall(Experiment):
             "上方光电门没有紧贴在小球下面，而是低了一段，小球经过它开始计时的时候已经在往下运动了。",
             "The upper photogate is not just below the ball but some distance lower, so the ball is "
             "already moving when it starts the timer.",
-            "bend", ("slope_low", "curve_up", "intercept_neg"),
+            "bend", ("intercept_neg", "slope_low", "curve_up"),
             magnitude=Prior.loguniform(0.1, 3.0, 601),
             magnitude_label_zh="小球下沿到上方光束的距离", magnitude_unit="cm",
             fix_zh="把上方光电门移到小球正下方、光束刚好贴着小球下沿。",
