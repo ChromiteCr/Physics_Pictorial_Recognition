@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import re
@@ -228,6 +229,60 @@ def test_split_cli_refuses_degenerate_and_writes_split(tmp_path, capsys):
     # 已有 split.json 不允许悄悄覆盖
     assert rb.main(["--manifest", str(manifest), "--out", str(out), "split", "--src", str(tmp_path), "--gap-s", "auto"]) == 2
     assert rb.main(["--manifest", str(manifest), "--out", str(out), "split", "--src", str(tmp_path), "--gap-s", "auto", "--force"]) == 0
+
+
+def _parser_flags(parser):
+    flags = set(parser._option_string_actions)
+    for act in parser._actions:
+        if isinstance(act, argparse._SubParsersAction):
+            for sp in act.choices.values():
+                flags |= set(sp._option_string_actions)
+    return flags
+
+
+def test_documented_usage_lines_match_the_real_cli():
+    """文档里的每条用法：用到的选项都存在，--manifest/--out 写在子命令前面。"""
+    parser = rb.build_parser()
+    flags = _parser_flags(parser)
+    subs = {"split", "confirm", "build", "score", "rules"}
+    lines = [l for l in rb.__doc__.splitlines() if "python -m lab_detective.bench.recognition_bench" in l]
+    assert len(lines) == len(subs)
+    seen = set()
+    for l in lines:
+        assert set(re.findall(r"--[a-z][a-z-]*", l)) <= flags, l
+        tokens = l.replace("[", " ").replace("]", " ").split()
+        sub = next(t for t in tokens[3:] if t in subs)
+        seen.add(sub)
+        after = tokens[tokens.index(sub) + 1:]
+        assert not {"--manifest", "--out"} & set(after), f"{sub}: 顶层选项必须写在子命令前面"
+    assert seen == subs
+
+
+def test_documented_score_invocation_runs(tmp_path):
+    _, _, out, _, _ = _built(tmp_path)
+    preds = tmp_path / "p.jsonl"
+    exs = list(read_jsonl(out / "test.jsonl"))
+    preds.write_text("".join(json.dumps({"id": e.id, "text": _text("C")}) + "\n" for e in exs), encoding="utf-8")
+    assert rb.main(["--out", str(out), "score", "--pred", str(preds), "--report", str(tmp_path / "rep.json"),
+                    "--arm", "demo"]) == 0
+    rep = json.loads((tmp_path / "rep.json").read_text(encoding="utf-8"))
+    assert rep["arm"] == "demo" and rep["n_test"] == len(exs)
+    with pytest.raises(SystemExit):  # 把 --out 写在子命令后面是用法错误
+        rb.main(["score", "--pred", str(preds), "--out", str(tmp_path / "rep.json")])
+
+
+def test_draft_split_is_flagged_until_student_confirms(tmp_path, capsys):
+    rows, split, out, meta, _ = _built(tmp_path)
+    assert split["status"] == "draft" and meta["split"]["status"] == "draft"
+    assert any("草稿" in w for w in meta["warnings"])
+    # 没有 split.json 时 confirm 报错；有了之后记下确认人，build 的警告消失
+    assert rb.main(["--out", str(out), "confirm", "--who", "学生"]) == 2
+    rb.write_split(split, out / "split.json")
+    assert rb.main(["--out", str(out), "confirm", "--who", "学生"]) == 0
+    confirmed = rb.load_split(out / "split.json")
+    assert confirmed["status"] == "confirmed" and confirmed["confirmed_by"] == "学生" and confirmed["confirmed_at"]
+    meta2 = rb.build_test_set(rows, confirmed, out, image_root=tmp_path / "photos")
+    assert not any("草稿" in w for w in meta2["warnings"]) and meta2["split"]["status"] == "confirmed"
 
 
 # ── review.json 与 gold ───────────────────────────────────────────────
@@ -687,3 +742,13 @@ console.log(JSON.stringify(out));
     assert o["export"] == '{"a":"Z","c":"C"}' and o["exportEmpty"] == "{}"
     assert o["merge"] == {"labels": {"a": "E"}, "unknown": ["zzz"], "bad": ["b", "c"]}  # 小写 z 不是合法字母
     assert o["mergeBadRoot"]["bad"] and o["mergeBadRoot"]["labels"] == {}
+
+
+def test_dev_seen_photos_never_in_test():
+    from lab_detective.bench import recognition_bench as rb
+    rows = [{"id": f"self_captured_IMG_{9300 + i}"} for i in range(40)]
+    times = {r["id"]: f"2026:07:12 {10 + i // 4:02d}:{(i % 4) * 5:02d}:00" for i, r in enumerate(rows)}
+    sp = rb.session_split(rows, times=times, gap_s=1800)
+    for pid, v in sp["photos"].items():
+        if rb._dev_seen(pid):
+            assert v["split"] == "train", pid

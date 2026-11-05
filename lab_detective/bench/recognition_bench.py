@@ -1,9 +1,13 @@
 """识别 bench（照片）：按拍摄时段切分、生成测试集、给预测打分、规则基线。
 
-    python -m lab_detective.bench.recognition_bench split  [--gap-s 1800|auto] [--seed 0] [--src 原图根目录]
-    python -m lab_detective.bench.recognition_bench build  [--review review.json]
-    python -m lab_detective.bench.recognition_bench score  --pred 预测.jsonl [--out report.json]
-    python -m lab_detective.bench.recognition_bench rules
+    python -m lab_detective.bench.recognition_bench [--manifest M] [--out 目录] split  [--gap-s 1800|auto] [--seed 0] [--src 原图根目录]
+    python -m lab_detective.bench.recognition_bench [--manifest M] [--out 目录] confirm --who 姓名
+    python -m lab_detective.bench.recognition_bench [--manifest M] [--out 目录] build  [--review review.json]
+    python -m lab_detective.bench.recognition_bench [--out 目录] score  --pred 预测.jsonl [--report report.json] [--arm 名称]
+    python -m lab_detective.bench.recognition_bench [--out 目录] rules
+
+``--manifest`` 和 ``--out`` 是顶层选项，必须写在子命令前面；``--out`` 是 bench 目录（默认 results/bench/recognition），
+不是报告文件。``confirm`` 由学生在定好间隔和种子之后运行，把 split.json 的 status 从 draft 改成 confirmed。
 
 这是工程脚手架，不是研究计划：bench 的切分间隔、"未知/Z 怎么计分"、主指标和 Δ 都由学生在冻结前亲笔定死
 （设计文档 §16.5）。冻结（bench.freeze）永远由学生本人运行，本文件从不调用。
@@ -59,6 +63,7 @@ import numpy as np
 from PIL import Image
 from scipy import stats as sps
 
+from ..paths import DATA_ROOT
 from ..training.format import Example, read_jsonl, sha256_file, write_jsonl
 from ..vision import cues as _cues
 from ..vision.letters import LETTERS, OTHER_LETTER, TABLE, entry, normalize_letter
@@ -69,11 +74,9 @@ from . import stats
 
 REPO = Path(__file__).resolve().parents[2]
 MANIFEST_DEFAULT = REPO / "results" / "recognition" / "manifest.jsonl"
-# 原图目录（manifest 的 orig_path 相对它）。2026-11-05 21:06 旧项目的 data/ 被搬进了仓库的 datasets/，
-# 旧路径只作兜底；EXIF 里的拍摄时间只能从原图读（results/recognition/images 里的图不带 EXIF）。
-_SRC_CANDIDATES = (REPO / "datasets",
-                   Path("/Users/billgao/Documents/Coding/SCPKU/Physics-Pictorial-Recognition/Proj/data"))
-SRC_DEFAULT = next((p for p in _SRC_CANDIDATES if (p / "self_captured").exists()), _SRC_CANDIDATES[0])
+# 原图目录（manifest 的 orig_path 相对它，同 vision/build_dataset.py）。EXIF 里的拍摄时间只能从原图读
+# （results/recognition/images 里的图不带 EXIF）。
+SRC_DEFAULT = DATA_ROOT
 BENCH_DIR = REPO / "results" / "bench" / "recognition"
 RUNS_DIR = REPO / "results" / "bench" / "recognition_runs"
 
@@ -221,6 +224,17 @@ def gap_table(dated: Sequence[tuple[float, str]], gaps: Sequence[float] = GAP_LA
     return {str(g): len(group_sessions(dated, g)) for g in gaps}
 
 
+# 开发识别模块时已经看过或跑过的照片（第一轮识别模块报告）：它们所在的时段一律划进训练侧，不进测试集。
+DEV_SEEN_STEMS = frozenset({
+    "IMG_9307", "IMG_9314", "IMG_9316", "IMG_9340", "IMG_9341", "IMG_9344", "IMG_9359", "IMG_9360",
+    "IMG_9361", "IMG_9362", "IMG_9363", "IMG_9449", "IMG_9461", "IMG_9468",
+})
+
+
+def _dev_seen(photo_id: str) -> bool:
+    return any(stem in photo_id for stem in DEV_SEEN_STEMS)
+
+
 def _hash_key(seed: int, first_id: str) -> str:
     return hashlib.sha1(f"{seed}|{first_id}".encode("utf-8")).hexdigest()
 
@@ -274,7 +288,8 @@ def session_split(
             "请在冻结前自己定一个间隔（--gap-s N 或 --gap-s auto），再重新运行。")
 
     k = min(max(1, int(math.floor(test_frac * n + 0.5))), n - 1)
-    ranked = sorted(range(n), key=lambda s: _hash_key(seed, sessions[s][0]))
+    blocked = {i for i, members in enumerate(sessions) if any(_dev_seen(m) for m in members)}
+    ranked = [i for i in sorted(range(n), key=lambda s: _hash_key(seed, sessions[s][0])) if i not in blocked]
     test_idx = set(ranked[:k])
 
     photos: dict[str, dict] = {}
@@ -487,6 +502,8 @@ def build_test_set(
     test_gold = Counter(e.meta["gold_letter"] for e in examples)
     status_counts = Counter(e.meta["gold_status"] for e in examples)
     warnings = list(split.get("warnings", []))
+    if split.get("status") != "confirmed":
+        warnings.append("切分还是草稿：间隔和种子未经学生确认（定好后运行 confirm），冻结前请先确认")
     missing = sorted(set(all_gold) - set(test_gold))
     if missing:
         warnings.append(f"测试集里没有出现的字母（全集里有）：{'、'.join(missing)}；这些类别没有测试证据")
@@ -500,7 +517,7 @@ def build_test_set(
         "gold_letter_counts": dict(sorted(test_gold.items())),
         "gold_status_counts": dict(status_counts),
         "n_reviewed_total": len(review or {}), "review_sha256": review_sha256,
-        "split": {k: split[k] for k in ("params", "n_photos", "n_sessions", "n_test_sessions",
+        "split": {k: split[k] for k in ("status", "params", "n_photos", "n_sessions", "n_test_sessions",
                                         "session_fraction_test", "photo_fraction_test", "nearest_train_gap_s")},
         "detector": detector_info or {},
         "warnings": warnings,
@@ -847,6 +864,27 @@ def _cmd_split(a: argparse.Namespace) -> int:
     return 0
 
 
+def confirm_split(path: str | Path, who: str) -> dict:
+    """学生确认切分：status 改成 confirmed，记下确认人和时间。之后 split --force 会重置回 draft。"""
+    info = load_split(path)
+    info["status"] = "confirmed"
+    info["confirmed_by"] = who
+    info["confirmed_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    write_split(info, path)
+    return info
+
+
+def _cmd_confirm(a: argparse.Namespace) -> int:
+    path = a.out / SPLIT_FILE
+    if not path.exists():
+        print(f"没有 {path}，请先运行 split。", file=sys.stderr)
+        return 2
+    info = confirm_split(path, a.who)
+    print(f"已确认：间隔 {info['params']['gap_s']:g} s，种子 {info['params']['seed']}，"
+          f"{info['n_test_photos']} 张测试照片（{info['photo_fraction_test']:.0%}）。")
+    return 0
+
+
 def _cmd_build(a: argparse.Namespace) -> int:
     rows = read_jsonl_dicts(a.manifest)
     split_path = a.out / SPLIT_FILE
@@ -887,7 +925,7 @@ def _cmd_rules(a: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="识别 bench：切分、生成、打分、规则基线")
     ap.add_argument("--manifest", type=Path, default=MANIFEST_DEFAULT)
     ap.add_argument("--out", type=Path, default=BENCH_DIR)
@@ -900,6 +938,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--src", type=Path, default=SRC_DEFAULT, help="原图根目录（默认 datasets/，用来读原图 EXIF）")
     s.add_argument("--force", action="store_true", help="覆盖已有 split.json")
     s.set_defaults(fn=_cmd_split)
+    k = sub.add_parser("confirm", help="学生确认切分（status: draft → confirmed）")
+    k.add_argument("--who", required=True)
+    k.set_defaults(fn=_cmd_confirm)
     b = sub.add_parser("build", help="生成 test.jsonl（需要 split.json；会跑 YOLO）")
     b.add_argument("--review", type=Path, default=None, help="review_gallery 导出的 review.json")
     b.add_argument("--weights", type=Path, default=None)
@@ -914,7 +955,11 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("rules", help="YOLO 加规则基线（真值框 / 检测框）")
     r.add_argument("--runs", type=Path, default=RUNS_DIR)
     r.set_defaults(fn=_cmd_rules)
-    a = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    a = build_parser().parse_args(argv)
     return a.fn(a)
 
 
