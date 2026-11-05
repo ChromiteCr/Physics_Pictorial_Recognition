@@ -53,7 +53,8 @@ def build_grid(exp: Experiment, cause_id: str, kinds: set[str]) -> CauseGrid:
     for n, p in exp.nuisance.items():
         if n not in params:
             g, lw = p.grid()
-            params[n] = np.full((logw.size, 1), g[int(np.argmax(lw))])
+            mid = float(np.sum(g * np.exp(lw)))  # 先验均值处的网格点
+            params[n] = np.full((logw.size, 1), g[int(np.argmin(np.abs(g - mid)))])
     return CauseGrid(cause_id, tuple(names), params, logw)
 
 

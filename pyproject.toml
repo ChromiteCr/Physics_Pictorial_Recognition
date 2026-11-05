@@ -34,3 +34,6 @@ addopts = "-q"
 
 [tool.setuptools.packages.find]
 include = ["lab_detective*"]
+
+[tool.setuptools.package-data]
+"lab_detective.knowledge" = ["data/*.json", "data/cards/*.json"]
