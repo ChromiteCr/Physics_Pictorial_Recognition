@@ -166,6 +166,8 @@ def test_card_matches_module():
     assert set(card["common_causes"]) == set(EXP.cause_ids())
     assert all(k.startswith("kp.") for k in card["knowledge_points"])
     assert set(card["yolo_cues"]) <= {"cart", "track", "string", "dynamometer", "wooden_block", "iron_block", "spring"}
+    # σ_a = 0.05 m/s² 按 0.01 ms 计时器定标（0.1 ms 取整在 50° 时单独就约 0.1 m/s²）
+    assert any("0.01 ms" in a for a in card["apparatus"])
 
 
 def test_dataset_roundtrip():
