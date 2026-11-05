@@ -162,15 +162,17 @@ def _cause_mechanism(labsim_id: str, cause_id: str) -> str | None:
 def related_kps(exp_id: str, cause_id: str | None = None) -> list[str]:
     """与实验（以及给定的误差原因）相关的知识点 id，去重并按相关性排序。
 
-    顺序：实验卡的 knowledge_points（无卡片时用知识点里 experiments 含该实验的）→
-    原因专属知识点（卡片 cause_kps + 映射文件 cause 段）→ 原因机制对应的测量科学知识点 →
-    其余在 experiments 里列了该实验的知识点。别名换成正式 id，不认识的 id 丢弃。
+    不给原因：实验卡的 knowledge_points（无卡片时用 experiments 含该实验的知识点）→ 其余关联知识点。
+    给了原因：实验的核心知识点（卡片第一个）→ 原因专属知识点（卡片 cause_kps + 映射文件 cause 段）→
+    原因机制对应的测量科学知识点 → 卡片其余知识点 → 其余关联知识点。取前几个就能拿到与原因最相关的。
+    别名换成正式 id，不认识的 id 丢弃。
     """
     by_exp = [k["id"] for k in _kps() if exp_id in k["experiments"]]
     ok, _ = _scan_cards()
     card = ok.get(exp_id, {})
     lst = lambda v: [i for i in v if isinstance(i, str)] if isinstance(v, list) else []  # noqa: E731
-    ids: list[str] = lst(card.get("knowledge_points")) or by_exp
+    core: list[str] = lst(card.get("knowledge_points")) or by_exp
+    ids: list[str] = core[:1] if cause_id else list(core)
     if cause_id:
         cks = card.get("cause_kps")
         ids += lst(cks.get(cause_id)) if isinstance(cks, dict) else []
@@ -180,6 +182,7 @@ def related_kps(exp_id: str, cause_id: str | None = None) -> list[str]:
         mech = _cause_mechanism(labsim_id, cause_id)
         if mech is not None:
             ids += lst(cmap.get("mechanism", {}).get(mech))
+        ids += core
     ids += by_exp
     return _dedup(c for c in map(canonical, ids) if c is not None)
 

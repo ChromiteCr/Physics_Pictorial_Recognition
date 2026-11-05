@@ -154,7 +154,7 @@
   },
   {
     "id": "kp.reaction_time",
-    "aliases": ["kp.human_reaction_time", "kp.manual_timing"],
+    "aliases": ["kp.human_reaction_time", "kp.manual_timing", "kp.timing_and_counting"],
     "name_zh": "人的反应时间与手动计时",
     "statement": "用手按秒表计时，从看到事件发生到按下按钮有一段反应时间，一般约 0.1~0.3 s，而且每次不完全相同。开始和停止时的延迟若相同可以抵消，不同则留下误差，延迟的起伏还带来偶然误差；因此应测量较长的时间间隔，例如测单摆周期时测 30~50 次全振动的总时间再求周期。",
     "formula": "T = t总/n",
@@ -193,7 +193,7 @@
   },
   {
     "id": "kp.linearization",
-    "aliases": ["kp.linearisation", "kp.inverse_relation_linearisation", "kp.inverse_relation_linearization"],
+    "aliases": ["kp.linearisation", "kp.inverse_relation_linearisation", "kp.inverse_relation_linearization", "kp.graph_linearization"],
     "name_zh": "化曲为直",
     "statement": "两个量不成正比时，可以换用它们的某种函数作坐标，使图像变成直线，便于判断规律和求斜率。例如探究加速度与质量的关系时作 a–1/m 图像；用单摆测重力加速度时作 T²–l 图像，斜率为 4π²/g。",
     "formula": "a = F·(1/m)；T² = (4π²/g)·l",
@@ -243,7 +243,7 @@
   },
   {
     "id": "kp.photogate",
-    "aliases": ["kp.light_gate", "kp.photo_gate"],
+    "aliases": ["kp.light_gate", "kp.photo_gate", "kp.photogate_speed"],
     "name_zh": "光电门测速度",
     "statement": "宽度为 d 的遮光片通过光电门时，计时器记下挡光时间 Δt，用 v = d/Δt 求速度。它实际上是遮光片通过光电门这段时间内的平均速度，d 越窄越接近瞬时速度；对匀加速运动，d/Δt 恰好等于挡光时间中点时刻的速度，略小于遮光片中心经过光电门时的速度。",
     "formula": "v ≈ d/Δt",
@@ -719,7 +719,7 @@
   },
   {
     "id": "kp.energy_dissipation",
-    "aliases": ["kp.friction_heat"],
+    "aliases": ["kp.friction_heat", "kp.friction_work"],
     "name_zh": "摩擦生热与能量守恒",
     "statement": "滑动摩擦力做功时，系统的一部分机械能转化为内能，产生的热量等于滑动摩擦力的大小与两物体相对滑动路程的乘积。有摩擦时系统的机械能减少，但能的总量保持不变。",
     "formula": "Q = Ff·s相对",
@@ -791,7 +791,7 @@
   },
   {
     "id": "kp.simple_pendulum",
-    "aliases": ["kp.pendulum", "kp.pendulum_period"],
+    "aliases": ["kp.pendulum", "kp.pendulum_period", "kp.simple_pendulum_period", "kp.small_angle_approximation"],
     "name_zh": "单摆",
     "statement": "细线一端固定、另一端系一个小球，线的伸缩和质量可以忽略、球的直径比线长短得多，这样的装置叫单摆。摆角很小（一般不超过 5°）时，单摆的运动可以看作简谐运动，周期 T = 2π√(l/g)，与摆球质量和振幅无关；摆长 l 是悬点到摆球球心的距离。摆角较大时，周期略大于 2π√(l/g)。",
     "formula": "T = 2π√(l/g)",

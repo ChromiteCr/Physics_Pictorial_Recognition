@@ -118,6 +118,10 @@ def test_related_kps_for_hooke():
     # 漏算挂钩（x 偏移）→ 系统误差、截距的意义、重力
     han = K.related_kps("hooke", "hooke.hanger_omitted")
     assert {"kp.systematic_error", "kp.graph_slope_intercept", "kp.gravity_weight"} <= set(han)
+    # 给了原因时，与原因最相关的知识点排在前面（facts.py 可能只取前几个）
+    assert han[0] == "kp.hooke_law" and "kp.gravity_weight" in han[:3]
+    assert "kp.elastic_limit" in lim[:3]
+    assert set(base) <= set(han)
     # 读数散布 → 偶然误差
     assert "kp.random_error" in K.related_kps("hooke", "hooke.reading_scatter")
     # 所有返回的都是正式 id，且不重复
