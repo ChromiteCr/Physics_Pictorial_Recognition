@@ -1,0 +1,75 @@
+{
+  "id": "hooke",
+  "name_zh": "探究弹簧弹力与形变量的关系",
+  "name_en": "Hooke's law: spring force vs extension",
+  "grade": "高中",
+  "goal": "探究弹簧弹力的大小与弹簧伸长量之间的定量关系，并由图像求出弹簧的劲度系数。",
+  "principle": "弹簧竖直悬挂，下端的挂钩上挂钩码。钩码静止时，弹簧对挂钩和钩码的拉力与它们的总重力二力平衡，所以弹簧弹力 F = (m钩码 + m挂钩)g；若原长是挂上挂钩之后再读的，则 F = m钩码·g。伸长量 x = L − L₀，L₀ 是弹簧自然下垂时的原长。以 F 为横轴、x 为纵轴描点作图，在弹性限度内图像是一条过原点的直线，斜率等于 1/k。",
+  "formula": "F = kx；x = L − L₀；F = mg；k = 1/斜率",
+  "variables": [
+    {"symbol": "m", "name": "钩码质量", "unit": "g", "role": "control"},
+    {"symbol": "L₀", "name": "弹簧原长", "unit": "cm", "role": "measured"},
+    {"symbol": "L", "name": "挂钩码后弹簧的长度", "unit": "cm", "role": "measured"},
+    {"symbol": "x", "name": "伸长量", "unit": "cm", "role": "derived"},
+    {"symbol": "F", "name": "弹簧弹力（拉力）", "unit": "N", "role": "derived"},
+    {"symbol": "k", "name": "劲度系数", "unit": "N/m", "role": "derived"}
+  ],
+  "apparatus": [
+    "铁架台（带铁夹）",
+    "弹簧",
+    "钩码若干（每个 50 g）及挂钩",
+    "刻度尺（分度值 1 mm）",
+    "重垂线（检查刻度尺是否竖直）",
+    "天平（称挂钩质量）",
+    "坐标纸"
+  ],
+  "steps": [
+    "把弹簧上端固定在铁架台上，让弹簧自然下垂；把刻度尺竖直固定在弹簧旁边，用重垂线检查刻度尺是否竖直。",
+    "弹簧静止后，视线与弹簧下端的指针平齐，读出原长 L₀，估读到分度值的下一位（如 12.35 cm）。",
+    "用天平称出挂钩的质量；或者先挂上挂钩，再读原长 L₀。",
+    "在挂钩上依次挂 50 g、100 g、150 g、200 g、250 g 钩码，每次等弹簧完全静止后，视线与指针平齐，读出弹簧长度 L，记入表格。",
+    "计算伸长量 x = L − L₀ 和拉力 F = mg（质量换算成千克，算上挂钩的质量，g 取 9.8 N/kg）。",
+    "以 F 为横轴、x 为纵轴描点，画一条直线，使尽可能多的点落在线上、其余点均匀分布在两侧，观察直线是否过原点。",
+    "由直线的斜率求劲度系数：k = 1/斜率；斜率的单位是 cm/N 时，k = 100/斜率（N/m）。",
+    "取下全部钩码，重新读原长，检查弹簧是否回到原长、原长读数是否有误。"
+  ],
+  "data_table": {
+    "columns": ["序号", "钩码质量 m/g", "拉力 F/N", "弹簧长度 L/cm", "伸长量 x/cm"]
+  },
+  "safety": [
+    "钩码总质量不要超过弹簧的弹性限度，以免弹簧被拉坏。",
+    "铁架台要放稳、钩码要挂牢，防止装置倾倒或钩码掉落砸伤。"
+  ],
+  "common_causes": [
+    "hooke.random_only",
+    "hooke.hanger_omitted",
+    "hooke.zero_offset",
+    "hooke.total_length",
+    "hooke.beyond_limit",
+    "hooke.reading_scatter"
+  ],
+  "knowledge_points": [
+    "kp.hooke_law",
+    "kp.elastic_force",
+    "kp.elastic_limit",
+    "kp.equilibrium_two_force",
+    "kp.gravity_weight",
+    "kp.graph_slope_intercept",
+    "kp.graph_method",
+    "kp.scale_reading",
+    "kp.parallax",
+    "kp.systematic_error",
+    "kp.random_error"
+  ],
+  "cause_kps": {
+    "hooke.random_only": ["kp.random_error", "kp.multiple_measurements", "kp.graph_method"],
+    "hooke.hanger_omitted": ["kp.gravity_weight", "kp.graph_slope_intercept", "kp.systematic_error"],
+    "hooke.zero_offset": ["kp.parallax", "kp.scale_reading", "kp.zero_adjustment"],
+    "hooke.total_length": ["kp.hooke_law", "kp.measurement_error", "kp.graph_slope_intercept"],
+    "hooke.beyond_limit": ["kp.elastic_limit", "kp.ideal_model"],
+    "hooke.reading_scatter": ["kp.equilibrium_two_force", "kp.parallax", "kp.random_error"]
+  },
+  "relation_family": "proportional",
+  "labsim_id": "hooke",
+  "yolo_cues": ["spring", "ruler", "track"]
+}

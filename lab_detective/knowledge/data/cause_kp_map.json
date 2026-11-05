@@ -1,0 +1,14 @@
+{
+  "mechanism": {
+    "none": ["kp.random_error", "kp.multiple_measurements"],
+    "x_offset": ["kp.systematic_error", "kp.graph_slope_intercept", "kp.zero_adjustment"],
+    "y_offset": ["kp.systematic_error", "kp.graph_slope_intercept", "kp.zero_adjustment", "kp.parallax"],
+    "x_scale": ["kp.systematic_error", "kp.graph_slope_intercept", "kp.relative_error"],
+    "y_scale": ["kp.systematic_error", "kp.graph_slope_intercept", "kp.relative_error"],
+    "bend": ["kp.systematic_error", "kp.ideal_model", "kp.graph_method"],
+    "scatter": ["kp.random_error", "kp.multiple_measurements", "kp.uncertainty", "kp.scale_reading"],
+    "drift": ["kp.systematic_error", "kp.control_variables"],
+    "aux_only": ["kp.systematic_error"]
+  },
+  "cause": {}
+}
