@@ -116,8 +116,10 @@ class Projectile(Experiment):
             fix_zh="降低斜槽倾角，或换表面稍粗糙的斜槽，保证小球纯滚动。",
             fix_en="Use a less steep or slightly rougher ramp so the ball rolls without slipping.",
         ),
+        # 推导：每个平均落点由 n 次落地取圆心，σ₀ = σ_单次/√n；白纸移动、释放位置或手法不一致
+        # 是与之独立的另一份随机误差 δ ⇒ 平均落点的标准差 σ = √(σ₀² + δ²)。
         Cause(
-            "projectile.landing_scatter", "落点散得很开", "landing points widely scattered",
+            "projectile.landing_scatter", "白纸被碰动或释放不一致", "paper shifted or release not repeatable",
             "几次落地之间白纸或复写纸被碰动了，或者每次释放的位置、放手方式不一样（有时推了一下）。",
             "The paper or carbon paper moved between drops, or the ball was released from a "
             "slightly different place or given a push some of the time.",
