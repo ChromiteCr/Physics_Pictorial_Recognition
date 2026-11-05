@@ -110,6 +110,22 @@ def _verify_all(public: dict, sealed: dict, data_dir: Path) -> list[str]:
     return errs
 
 
+def _stale_truths(public: dict, sealed: dict) -> list[str]:
+    from .catalog import build_engines
+
+    out, cache = [], {}
+    for k in sealed["key"]:
+        e = k["experiment"]
+        if e not in cache:
+            info = public["experiments"][e]
+            cache[e] = build_engines(e, info["config"], info.get("spec"))
+        for name, t in k["truth"].items():
+            eng = cache[e].get(name)
+            if eng is None or t["cause_id"] not in eng.cause_ids():
+                out.append(f"{k['run_id']} {name}: {t['cause_id']}")
+    return sorted(set(out))
+
+
 def analyse_run(sheet, sheet_path: Path, public: dict, key: dict, spec: dict) -> dict:
     datasets = ingest.run_datasets(sheet, public)
     run = next(r for r in public["runs"] if r["code"] == key["code"])
@@ -135,7 +151,8 @@ def analyse_run(sheet, sheet_path: Path, public: dict, key: dict, spec: dict) ->
             allowed = tuple(info["allowed_items"] if slot == "eig" else info.get("twin_allowed_items", ()))
             rec = recommend_item(eng, res["base"], allowed, int(spec["eig_n_samples"]), eig_seed(key["code"], slot))
             got = (receipt or {}).get("slots", {}).get(slot, {}).get("chosen")
-            checks[slot] = {"recomputed": rec["chosen"], "receipt": got, "reproduced": rec["chosen"] == got}
+            checks[slot] = {"recomputed": rec["chosen"], "receipt": got, "reproduced": rec["chosen"] == got,
+                            "unrestricted_top": rec["unrestricted_top"]}
         m["eig_check"] = checks
         out["engines"][name] = m
     return out
@@ -144,7 +161,7 @@ def analyse_run(sheet, sheet_path: Path, public: dict, key: dict, spec: dict) ->
 def summarise(runs: list[dict], public: dict, spec: dict, missing: list[str]) -> dict:
     conf = float(spec["ci_level"])
     exps = public["design"]["experiments"]
-    summary: dict = {"accuracy": {}, "p_true_mean": {}, "contrasts": {}, "confounded_pair": {},
+    summary: dict = {"accuracy": {}, "p_true_mean": {}, "equivalent": {}, "contrasts": {}, "confounded_pair": {},
                      "atlas_validity": {}, "clean_false_alarm": {}, "misfit": {}, "eig_reproduced": {},
                      "missing_runs": missing, "skipped": []}
     for r in runs:
@@ -175,6 +192,19 @@ def summarise(runs: list[dict], public: dict, spec: dict, missing: list[str]) ->
                 summary["accuracy"][k][st] = _acc(vals, conf)
                 pts = [stage_val(r["engines"][name], st, "p_true") for r in rs]
                 summary["p_true_mean"][k][st] = float(np.mean([p for p in pts if p is not None]))
+            eq = [r for r in rs if r["engines"][name]["equivalent"]]
+            ne = [r for r in rs if not r["engines"][name]["equivalent"]]
+            block = {"n_equivalent": len(eq), "equivalent_runs": [r["run_id"] for r in eq],
+                     "conditions": sorted({r["condition"] for r in eq}), "non_equivalent": {}}
+            if eq:
+                for st in STAGES:
+                    vals = [stage_val(r["engines"][name], st, "correct") for r in ne]
+                    vals = [v for v in vals if v is not None]
+                    if vals:
+                        pts = [stage_val(r["engines"][name], st, "p_true") for r in ne]
+                        block["non_equivalent"][st] = dict(
+                            _acc(vals, conf), p_true_mean=float(np.mean([p for p in pts if p is not None])))
+            summary["equivalent"][k] = block
             clean = [r for r in rs if r["condition"] == "clean"]
             summary["clean_false_alarm"][k] = _acc([not r["engines"][name]["base"]["correct"] for r in clean], conf)
             summary["misfit"][k] = {st: int(sum(1 for r in rs if (stage_val(r["engines"][name], st, "misfit") or False)))
@@ -256,6 +286,9 @@ def run_analysis(public: dict, sealed: dict, data_dir: str | Path, out_dir: str 
         raise ValueError("拆封前检查没通过：\n" + "\n".join(errs))
     spec = public["analysis_spec"]
     key_by_code = {k["code"]: k for k in sealed["key"]}
+    stale = _stale_truths(public, sealed)
+    if stale:
+        raise ValueError("密封表里的真值原因在现在的代码里找不到（物理代码改过原因 id）：\n" + "\n".join(stale))
     sheets = {}
     for p in ingest.find_sheets(data_dir):
         sh = read_sheet(p)
@@ -300,6 +333,16 @@ def tables_markdown(result: dict, public: dict) -> str:
             lab = "只用基础方案" if st == "base" else ("全部追加测量" if st == "all" else "基础 + " + SLOT_LABEL.get(st, st))
             L.append(f"| {k} | {lab} | {a['k']}/{a['n']} | {_f(a['acc'])} | [{_f(a['lo'])}, {_f(a['hi'])}] | "
                      f"{_f(s['p_true_mean'][k].get(st))} |")
+    eqs = {k: b for k, b in s["equivalent"].items() if b["n_equivalent"]}
+    if eqs:
+        L += ["", "## 真值按\"等价\"计的运行（这个引擎看不出这类故障，真值记为与它等价的原因）", "",
+              "| 实验/引擎 | 等价运行数 | 条件 | 阶段 | 去掉等价运行后 对/总 | 正确率 | 区间 | 平均 p_true |",
+              "|---|---|---|---|---|---|---|---|"]
+        for k, b in eqs.items():
+            for st, a in b["non_equivalent"].items():
+                lab = "只用基础方案" if st == "base" else ("全部追加测量" if st == "all" else "基础 + " + SLOT_LABEL.get(st, st))
+                L.append(f"| {k} | {b['n_equivalent']} | {'、'.join(b['conditions'])} | {lab} | {a['k']}/{a['n']} | "
+                         f"{_f(a['acc'])} | [{_f(a['lo'])}, {_f(a['hi'])}] | {_f(a['p_true_mean'])} |")
     L += ["", "## 配对 Wilcoxon（p_true 之差）", "",
           "| 对比 | 范围 | 配对数 | 差为 0 | 平均差 | 中位差 | 统计量 | p 值 | 备注 |", "|---|---|---|---|---|---|---|---|---|"]
     for label, block in s["contrasts"].items():

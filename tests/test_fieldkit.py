@@ -248,6 +248,7 @@ def test_live_fills_eig_without_revealing_and_merges_duplicates(tmp_path):
             assert any(set(r.stages) == {"best_fixed", "eig"} for r in sh.rows)
         dump = json.dumps(rc, ensure_ascii=False)
         assert "hooke." not in dump and "p_true" not in dump  # 回执里没有原因和后验
+        assert "ranking" not in dump and "eig_bits" not in dump  # 也没有排名（会透露引擎的偏向）
         lines = live.todo_lines(pub, sh)
         assert not any("hooke." in ln for ln in lines)
 
@@ -345,8 +346,38 @@ def test_analysis_end_to_end(tmp_path):
         for m in r["engines"].values():
             assert 0.0 <= m["base"]["p_true"] <= 1.0
     assert "pendulum/twin" in s["accuracy"]  # 单摆同时用留出孪生分析
+    n_scale = sum(1 for k in sea["key"] if k["experiment"] == "pendulum" and k["condition"] in ("wide_swing", "count_slip"))
+    eq = s["equivalent"]["pendulum/generic"]
+    assert eq["n_equivalent"] == n_scale == 2 and set(eq["conditions"]) == {"wide_swing", "count_slip"}
+    assert eq["non_equivalent"]["base"]["n"] == 4 - n_scale
+    assert s["equivalent"]["hooke/twin"]["n_equivalent"] == 0 and s["equivalent"]["pendulum/twin"]["n_equivalent"] == 0
+    assert "等价" in (tmp_path / "res" / "analysis_tables.md").read_text(encoding="utf-8")
     assert (tmp_path / "res" / "analysis_tables.md").read_text(encoding="utf-8").startswith("# 真实实验分析结果")
     json.dumps(res)  # 没有 NaN、numpy 类型
+
+
+def test_stale_truth_ids_are_reported():
+    pub, sea = _build(seed=19, experiments=("friction",), repeats=1)
+    assert analysis._stale_truths(pub, sea) == []
+    bad = json.loads(json.dumps(sea))
+    bad["key"][0]["truth"]["twin"]["cause_id"] = "friction.renamed_cause"
+    assert analysis._stale_truths(pub, bad) == [f"{bad['key'][0]['run_id']} twin: friction.renamed_cause"]
+
+
+def test_analysis_spec_and_atlas_overrides_are_committed():
+    base_pub, _ = _build(seed=23, experiments=("friction",), repeats=1)
+    kv = schedule.parse_kv(["wilcoxon_alternative=greater", "alpha=0.01", 'primary_contrast=["eig","repeat"]'])
+    assert kv == {"wilcoxon_alternative": "greater", "alpha": 0.01, "primary_contrast": ["eig", "repeat"]}
+    pub, sea = schedule.build_schedule(("friction",), repeats=1, sessions=2, seed=23, analysis=dict(FAST, **kv),
+                                       atlas={"confused_below": 0.7, "n_per_cause": 20})
+    assert pub["analysis_spec"]["wilcoxon_alternative"] == "greater" and pub["analysis_spec"]["alpha"] == 0.01
+    assert pub["atlas_check"]["confused_below"] == 0.7
+    assert pub["commitment"] != base_pub["commitment"] and schedule.verify_commitment(pub, sea)["ok"]
+    for bad in ({"wilcoxon_zero_method": "drop"}, {"no_such_key": 1}, {"primary_contrast": ["eig", "magic"]}):
+        with pytest.raises(ValueError):
+            schedule.build_schedule(("friction",), repeats=1, sessions=1, seed=1, atlas=False, analysis=bad)
+    with pytest.raises(ValueError):
+        schedule.build_schedule(("friction",), repeats=1, sessions=1, seed=1, atlas={"confused_below": 0.95})
 
 
 def test_sealed_key_tamper_blocks_analysis(tmp_path):
@@ -398,6 +429,11 @@ def test_derivation_sheet_has_every_training_cause_and_no_answers():
             for leak in (c.fix_zh, c.magnitude_label_zh):
                 if leak and leak not in c.description_zh:  # 很短的标签（如"车身长"）可能本来就在描述里
                     assert leak not in text, (c.id, leak)
+    descs = " ".join(c.description_zh for e in training_experiments() for c in e.causes)
+    for exp in training_experiments():  # 不列产品的追加测量菜单（有些菜单名直接点明了分开它的测量）
+        for m in exp.menu:
+            if m.label_zh not in descs:
+                assert m.label_zh not in text, (exp.id, m.label_zh)
     for exp in held_out_experiments():
         assert f"`{exp.id}" not in text and exp.name_zh not in text
     assert not any(f"`{s}`" in text or f" {s} " in text for s in SIGNATURES if s != "none")

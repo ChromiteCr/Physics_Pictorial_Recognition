@@ -2,7 +2,8 @@
 
 - 只读基础方案的读数（追加测量还没有任何读数时才允许运行），记下基础读数的指纹；
 - 用与产品相同的 eig.recommend，固定种子（由运行代码决定）和样本数（公开表里预先规定），结果可复算；
-- 危险的菜单项（例如真实弹簧上挂 350 g）不选，回执里同时记下不加限制时的第一名；
+- 危险的菜单项（例如真实弹簧上挂 350 g）不选；回执只记选中的项目、基础读数指纹、种子标记和样本数
+  （不记排名和各项的信息增益，免得透露引擎眼下偏向哪个原因；分析时会复算）；
 - 推荐的项目和最佳固定测量或简单重复相同时只做一次，槽位合并标在同一组行上；
 - 屏幕上只显示要做的动作，不显示后验和任何原因，学生保持不知道引擎的猜测。
 
@@ -137,8 +138,8 @@ def run_live(sheet_path: str | Path, public: dict, now: str | None = None) -> di
         units = dict(info["units"])
         units.update({TWIN_PREFIX + k: v for k, v in info.get("twin_units", {}).items()})
         _fill(sheet, slot, rec["chosen"], plan, units, twin_only)
-        rec["howto"] = howto(fexp, eng, rec["chosen"])
-        receipt["slots"][slot] = rec
+        receipt["slots"][slot] = {"chosen": rec["chosen"], "seed_tag": f"fieldkit|{run['code']}|{slot}",
+                                  "howto": howto(fexp, eng, rec["chosen"])}
     write_sheet(sheet, sheet_path)
     receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding="utf-8")
     return receipt

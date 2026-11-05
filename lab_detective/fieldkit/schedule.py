@@ -68,6 +68,36 @@ ANALYSIS_SPEC_DEFAULT = {
     "missing_rule": "exclude_and_list",
 }
 ATLAS_CHECK_DEFAULT = {"n_per_cause": 200, "confused_below": 0.75, "separable_at": 0.9}
+_SLOTS_ALL = ("eig", "best_fixed", "repeat", "twin_eig")
+_CHOICES = {"primary_metric": ("p_true",), "followup_mode": ("single",), "pool": ("mainline_b", "all"),
+            "wilcoxon_zero_method": ("wilcox", "pratt", "zsplit"),
+            "wilcoxon_alternative": ("two-sided", "greater", "less"), "missing_rule": ("exclude_and_list",)}
+
+
+def check_analysis_spec(spec: dict) -> None:
+    """建表前检查分析规则：键必须是已知的，取值在允许范围内（不对的直接报错，不悄悄改）。"""
+    unknown = set(spec) - set(ANALYSIS_SPEC_DEFAULT)
+    if unknown:
+        raise ValueError(f"分析规则里有不认识的键：{sorted(unknown)}")
+    for k, allowed in _CHOICES.items():
+        if spec[k] not in allowed:
+            raise ValueError(f"{k} 只能是 {allowed}，现在是 {spec[k]!r}")
+    for pair in [spec["primary_contrast"]] + list(spec["secondary_contrasts"]):
+        if len(pair) != 2 or any(s not in _SLOTS_ALL for s in pair):
+            raise ValueError(f"对比必须是两个槽位（{_SLOTS_ALL}），现在是 {pair!r}")
+    for k in ("alpha", "misfit_alpha"):
+        if not 0 < float(spec[k]) < 1:
+            raise ValueError(f"{k} 必须在 0 和 1 之间")
+    if not 0 < float(spec["ci_level"]) < 1 or int(spec["eig_n_samples"]) < 8:
+        raise ValueError("ci_level 必须在 0 和 1 之间，eig_n_samples 至少 8")
+
+
+def check_atlas_params(params: dict) -> None:
+    unknown = set(params) - set(ATLAS_CHECK_DEFAULT)
+    if unknown:
+        raise ValueError(f"图谱检查里有不认识的键：{sorted(unknown)}")
+    if not 0 < params["confused_below"] <= params["separable_at"] <= 1 or int(params["n_per_cause"]) < 10:
+        raise ValueError("要求 0 < confused_below ≤ separable_at ≤ 1，n_per_cause ≥ 10")
 
 
 # ── 哈希 ─────────────────────────────────────────────────────────────────
@@ -260,8 +290,11 @@ def build_schedule(experiments=DEFAULT_EXPERIMENTS, repeats: int = 2, sessions: 
         slots[e] = DEFAULT_SLOTS + ex
     cfg = {e: dict(FIELD_EXPERIMENTS[e].config, **(config or {}).get(e, {})) for e in experiments}
     spec = dict(ANALYSIS_SPEC_DEFAULT, **(analysis or {}))
+    check_analysis_spec(spec)
     atlas_params = None if atlas is False or atlas is None else dict(
         ATLAS_CHECK_DEFAULT, **(atlas if isinstance(atlas, dict) else {}))
+    if atlas_params is not None:
+        check_atlas_params(atlas_params)
 
     infos, truths, warnings = {}, {}, []
     for e in experiments:
@@ -445,6 +478,20 @@ def load_json(path: str | Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def parse_kv(items: list[str]) -> dict:
+    """--analysis alpha=0.01 wilcoxon_alternative=greater primary_contrast='["eig","best_fixed"]'"""
+    from .sheet import parse_scalar
+
+    out: dict = {}
+    for it in items or []:
+        k, v = it.split("=", 1)
+        try:
+            out[k.strip()] = json.loads(v)
+        except json.JSONDecodeError:
+            out[k.strip()] = parse_scalar(v)
+    return out
+
+
 def _parse_config(items: list[str]) -> dict:
     """--config friction.scale_division=0.2 newton2.cart_mass_g=480"""
     from .sheet import parse_scalar
@@ -468,6 +515,8 @@ def main() -> None:
     b.add_argument("--seed", type=int, default=None, help="不给就用系统随机数（推荐）")
     b.add_argument("--config", nargs="*", default=[], help="实验.参数=值，例如 newton2.cart_mass_g=480")
     b.add_argument("--twin-eig", action="store_true", help="单摆加做留出孪生的信息增益推荐")
+    b.add_argument("--analysis", nargs="*", default=[], help="改分析规则：键=值，例如 wilcoxon_alternative=greater")
+    b.add_argument("--atlas", nargs="*", default=[], help="改图谱检查：键=值，例如 confused_below=0.7 n_per_cause=500")
     v = sub.add_parser("verify")
     v.add_argument("--public", required=True)
     v.add_argument("--sealed", required=True)
@@ -475,7 +524,8 @@ def main() -> None:
     if a.cmd == "build":
         exps = tuple(x.strip() for x in a.experiments.split(",") if x.strip())
         extra = {"pendulum": ("twin_eig",)} if a.twin_eig and "pendulum" in exps else {}
-        public, sealed = build_schedule(exps, a.repeats, a.sessions, a.seed, _parse_config(a.config), extra)
+        public, sealed = build_schedule(exps, a.repeats, a.sessions, a.seed, _parse_config(a.config), extra,
+                                        parse_kv(a.analysis), parse_kv(a.atlas) or True)
         res = write_outputs(public, sealed, a.out)
         print(f"共 {public['design']['n_runs']} 次运行。")
         print(f"公开表：{res['public']}")
