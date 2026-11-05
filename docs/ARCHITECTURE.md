@@ -109,6 +109,7 @@ bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.free
   相邻照片间隔 ≤ `gap_s`（默认 1800 s）算同一时段，约 25% 的时段整段进测试集（按首张照片 id 的哈希排序取前 k 个，新增照片不会打乱已有时段）。
   现有 200 张照片全拍于 29 分钟内，默认间隔只得到 1 个时段，`split` 会拒绝并列出各间隔下的时段数，由学生用 `--gap-s N|auto` 定下来（写进 `split.json.params`）。
   时段太少时测试集与训练集的相邻照片仍可能是同一场景的连拍，`split.json.nearest_train_gap_s` 记录最近间隔。
+  `split.json.status` 初始为 `draft`；学生定好间隔和种子后运行 `recognition_bench --out <bench 目录> confirm --who <姓名>` 改成 `confirmed`，在此之前 `meta.json` 带"切分还是草稿"的警告。命令行里 `--manifest`、`--out` 是顶层选项，写在子命令前面。
   **训练样本生成必须排除 `split_ids(load_split(), "test")`**，并用 `check_no_overlap` 自查。
 - **`test.jsonl`**：§2.5 的格式，`task=recognize`、`source=photo`、`id=recbench-<照片id>`。messages 由 `vision/prompt.py` 的 `build_messages` 拼，
   图是带编号框的 `images/<id>.jpg`（编号框来自 YOLO **检测**结果，与推理一致，不是真值框）。assistant 里只有 `letter` 是 gold，`open_name/cues/apparatus` 只是占位。
