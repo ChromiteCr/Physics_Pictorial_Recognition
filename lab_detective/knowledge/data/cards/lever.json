@@ -45,21 +45,21 @@
     "lever.scale_zero"
   ],
   "knowledge_points": [
-    "kp.lever_balance_condition",
-    "kp.moment_arm",
-    "kp.lever_self_weight",
-    "kp.spring_scale_zeroing",
+    "kp.lever_balance",
+    "kp.lever",
+    "kp.spring_scale",
+    "kp.zero_adjustment",
     "kp.static_friction",
-    "kp.inverse_relation_linearisation",
+    "kp.linearization",
     "kp.systematic_error",
     "kp.random_error"
   ],
   "cause_kps": {
-    "lever.unbalanced": ["kp.lever_self_weight"],
-    "lever.pivot_offset": ["kp.moment_arm"],
-    "lever.scale_angle": ["kp.moment_arm"],
+    "lever.unbalanced": ["kp.lever_balance"],
+    "lever.pivot_offset": ["kp.lever"],
+    "lever.scale_angle": ["kp.lever"],
     "lever.pivot_friction": ["kp.static_friction"],
-    "lever.scale_zero": ["kp.spring_scale_zeroing"]
+    "lever.scale_zero": ["kp.zero_adjustment", "kp.spring_scale"]
   },
   "relation_family": "inverse",
   "labsim_id": "lever",
