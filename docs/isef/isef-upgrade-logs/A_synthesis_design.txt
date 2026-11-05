@@ -1,0 +1,1084 @@
+## design
+  - name: Lab Detective: engine-trained, fully offline diagnosis of systematic error in school mechanics labs, and the one measurement that settles it (continuation of Physics Pictorial Recognition)
+  - one_line_pitch: A 'wrong' lab result is usually an accurate measurement of a slightly different experiment. Lab Detective is a fully offline lab partner that works out which hidden cause best explains a student's mechanics data (unbalanced friction, a mis-zeroed spring scale, a spinning ball), says plainly when the data cannot tell, and names the one extra measurement that would settle it. The Bayesian physics engine behind it also trains a 4-billion-parameter vision-language model with no human or API labels, and the project measures how much of that skill transfers to experiments the model never saw, as a fraction of the Bayes-optimal limit.
+  - research_question: How close can a laptop-sized vision-language model, fine-tuned only on tasks labelled by a Bayesian physics engine and run fully offline, come to the Bayes-optimal limit set by the measurement protocol in naming the systematic cause behind school mechanics data and choosing the most informative next measurement, on experiments held out from training?
+  ## hypotheses_or_criteria
+    * RULE FOR EVERY LINE BELOW: bracketed numbers are proposals. The student restates each claim in his own words, chooses the final numbers and commits them in his signed research plan. The frozen test-set SHA-256 hashes are appended to the plan, dated, before any training or evaluation. Each arm has one pre-specified checkpoint. 'Bayes-optimal' always means 'Bayes-optimal under our simulator's assumptions'. A miss is reported as a miss.
+    * C1 - CONFIRMATORY, SCIENCE (identifiability atlas, E1). Under each curriculum experiment's standard multi-point worksheet (as written in the student's textbook), simulated with literature-calibrated noise, at least one pair of modelled causes is robustly confounded in at least [4] of the 6 experiments. Robustly confounded means pairwise Bayes-optimal accuracy < [0.6] in all four sensitivity settings (fault-size priors x0.5 and x2; noise x0.5 and x2). For each confounded pair, one extra measurement from the menu lifts pairwise Bayes accuracy to >= [0.8]. Falsified if fewer than [4] experiments have a robust confound, or if some confound cannot be resolved by any single menu measurement. The old app's single-reading protocol is reported descriptively only, because its failure is nearly certain.
+    * C2 - CONFIRMATORY, CLOSED LOOP (E3, E5). One extra measurement chosen by expected information gain (EIG) raises the engine posterior of the true cause more than one repeat of the last measurement, which is what students usually do. (a) Simulation: 840 closed-loop cases whose extra measurements come from the hi-fi simulator (it contains effects the engine never models), paired Wilcoxon signed-rank, alpha 0.05; the same test on labsim is reported as an in-model check. (b) Real apparatus: the student's own sealed fault-injection runs, where BOTH follow-ups are measured in every run in script-randomised order, paired Wilcoxon, n >= [24] runs. If fewer than [24] real runs exist at the analysis freeze, (b) is reported as pending and completed in Phase 2 with the same method.
+    * C3 - CONFIRMATORY, PRIMARY ML (E4). On the 6 held-out experiments (720 cases), the engine-trained Qwen3.5-4B (S1, engine-target SFT) beats the untuned Qwen3.5-4B on top-1 cause accuracy (exact McNemar, two-sided alpha 0.05). Both arms get the identical prompt contract, experiment card, code-computed signature panel, candidate causes written as plain physical descriptions with no signature tags, JSON schema, greedy decoding and 512-token budget. The gain is also reported as a fraction of the engine's Bayes-optimal accuracy on the same cases, with an experiment-level cluster bootstrap. C3 is read as 'learned from engine labels' only if the shuffled-label LoRA control gains < [2] pp over the base on the same cases.
+    * SECONDARY FAMILY (pre-registered, Holm-corrected, none is a headline claim). S-a transfer ladder, S1 vs base, on in-distribution, noise-shift, withheld-cause and hi-fi sets; pre-registered accuracy drop from in-distribution to hi-fi <= [10] pp. S-b S2 (expert iteration seeded from S1) vs S1 on the held-out experiments. S-c lower normalised EIG-regret of the model's next-measurement choice for S1 than base (Wilcoxon). S-d better calibration for S1 than base (Brier score, 15-bin ECE), and a false-alarm rate on clean data <= [10]%. S-e the best 4B is non-inferior to the untuned Qwen3.8-27B on a stratified 800-case subset (margin [3] pp) while using <= 1/4 of its peak memory. S-f verifier-flagged unsupported claims are <= [5]% for the tuned 4B and fewer than for both base models (McNemar); the verifier reaches precision >= [0.9] and recall >= [0.8] against the student's blinded audit. S-g on held-out experiments, S1 predicts each candidate cause's signature type more accurately than base; this is the mechanism of transfer. S-h engine honesty: >= [70]% of unmodelled faults are flagged 'cause not in my list'.
+    * CONTROLS THAT MUST PASS BEFORE ANY RESULT IS INTERPRETED. K1 the oracle-in-prompt arm scores >= [98]%, showing the harness and parser work. K2 the leakage checker catches a planted duplicate. K3 swapped-table control: each case keeps its label but gets the data table of another case of the same experiment, and every arm must fall to within [5] pp of chance. This shows decisions come from the data, and replaces the earlier row-shuffle idea, since row order carries no information. K4 adapter-effect check: the converted Mac adapter changes the output on >= [90]% of the parity cases where the server adapter changed it. K5 no-panel ablation run on both base and S1, reporting what the levelling tool itself contributes.
+    * WHAT THE UPGRADE MUST NOT CHANGE (TOST equivalence: the 90% CI of the paired difference must lie inside the margin). (1) The 4B's photo recognition on the people-screened, provenance-cleared image set plus the external CC set, within +/-[5] pp. (2) A fixed 300-item PhyX subset (MIT licence) of general physics, within +/-[3] pp.
+    * ENGINEERING CRITERIA (pass/fail). EC1: every function works with networking off, and no external API is called inside the product. EC2: the product stack peaks at <= [8] GB; everything we run together never exceeds 24 GB (watchdog log); the 27B baseline, run alone, peaks at <= [22] GB. EC3, latency on the M4 Pro: engine diagnosis < 1 s; 4B diagnosis plus explanation median <= [15] s; photo recognition <= [10] s per photo of <= 1024 px. EC4: >= 99% of outputs are schema-valid. EC5: manual selection of the six curriculum experiments is reachable in <= 2 clicks from every screen and is never overridden. EC6: >= 95% identical top-1 between the server bf16 adapter and the Mac 4-bit build on 200 parity cases. EC7: the fixed 'relative error < 15% = verified' rule is gone everywhere, replaced by an uncertainty-normalised z agreement.
+    * EXPLORATORY (no confirmatory claim). (1) Fix-and-verify predictions on >= [6] real runs. (2) The measured zero shift of the school's spring scales between vertical and horizontal use; the literature search found no value for it. (3) Near- vs far-transfer breakdown per held-out experiment. (4) P1 recognition results (candidate sets, one clarifying question, minimal pairs), reported per source group as small-n.
+  - product_experience: STUDENT (laptop tier, fully offline; Chinese UI with an English toggle for the booth)
+1. Open Lab Detective with networking off. There are two doors: 'Pick my experiment' or 'Identify from photo'. The six curriculum experiments are one click away on every screen, and a manual choice is never overridden.
+2. Photo path.
+- YOLO draws boxes and the student corrects them on the existing canvas. The existing rules decide when they can.
+- On a tie or an unknown setup, the local 4B model sees the photo, downscaled to <= 1024 px, with numbered boxes. It returns one of the six experiments or 'other: <name>', plus the cues it used ('string over a pulley to a hanging mass', 'track tilted').
+- The proven cart+track tie is settled by one question: 'What will you measure? Time over a marked distance / acceleration with a hanging weight / speed at the bottom of the slope.'
+- P1: a small candidate set is shown instead of a single guess.
+3. 'Other experiment'. The app says it has no physics model for '<name>'. The student picks the variables and the expected relation from a short menu: proportional, linear, inverse, square or power (P1: pre-filled from the photo). Code computes the same signature panel used everywhere, and the tuned model proposes suspects and a next measurement. Every later output is labelled 'AI estimate - not physics-verified'.
+4. Predict first (optional, predict-observe-explain). The student taps the suspect he expects. The choice stays on the device.
+5. Enter a multi-point table, e.g. extension for 5 loads, acceleration for 5 hanging masses, or final speed for 3 heights. Instrument resolutions come pre-filled from the teacher's profile. A single reading is still accepted, with a note that one point cannot separate suspects.
+6. Agreement meter, e.g. 'k = 24.1 +/- 0.6 N/m; z = 2.4: in tension'.
+- Bands: consistent / in tension / inconsistent.
+- The relative error is still shown, but the fixed 15% rule is gone.
+7. Suspect board: 4-6 cards plus 'Just noise' and 'Cause not in my list'.
+- Each card shows a friendly name, the physics name, the data signature it predicts and a live probability bar, e.g. 'Sticky track = friction not balanced: the a-F line crosses below zero'.
+- Ghost curves: each top suspect's best-fit curve is drawn through the student's points.
+8. One-more-measurement card.
+- It names the single most informative next measurement and its lab minutes.
+- Before the student measures, it shows each top suspect's predicted result ('Sticky track: about 0.35 m/s^2; Heavy hanger: about 0.52 m/s^2'). He may type his own prediction first.
+- He measures, enters the value and the bars move, for up to 3 rounds.
+- If no measurement on the menu can separate the last suspects, the app says so and explains why.
+9. Verdict and fix-and-verify.
+- The culprit is shown with a size interval, a quantitative fix and the predicted re-run result ('after re-zeroing, the intercept should be 0 +/- 0.03 N').
+- The re-run either confirms the culprit or reopens the case.
+10. Explanation.
+- Up to 120 words, written by the local model from the engine's fact sheet.
+- Every number, unit, direction word and named cause is checked. The model gets one rewrite; after that a fixed template is used.
+- In scripted mode only templates appear.
+- Curated 'how to reduce this error' tips follow, matching the curriculum requirement to analyse errors and propose ways to reduce them.
+11. Export the table, plots, verdict and the deciding measurement into his own report.
+
+TEACHER
+1. Once: set instrument profiles (spring-scale division and range, ruler, cart mass, track length, photogate flag width). Per lesson: choose the experiments and switch off causes that do not apply to the school's kit. The 'speed computed from the height' method check is off by default.
+2. Scripted mode (template text only) is the default and is required for every lesson. Assessment mode (P1) shows the evidence and probability bars but hides the verdict.
+3. Protocol view (P1): a heat map from the atlas of which causes today's worksheet cannot tell apart, plus the one protocol change that fixes most of them (e.g. 'add a zero-hanging-mass run').
+4. Fault-library viewer: each cause's physics, data signature, noise model and source.
+5. Practice challenge (P1): the software plants a hidden fault in a virtual run, and groups find it with the fewest measurements.
+6. Lessons are ordinary teaching. Nothing is logged or collected, and nothing enters the ISEF project unless a later IRB-approved study runs (Phase 3).
+
+JUDGES AT THE BOOTH (English build, offline, frozen)
+1. Judge Challenge (P1).
+- The judge draws one of 12 paper sabotage cards and picks a fault size.
+- The hi-fi simulator, which contains effects the engine never models, produces a realistic data table.
+- Lab Detective, on the 4B laptop tier, must name the culprit within 3 extra measurements, or say which pair it cannot separate and which measurement would.
+- Precomputed scenarios are the fallback.
+2. The spinning ball.
+- The old app said 'error 29%, not verified', and the student blamed friction.
+- Lab Detective shows that friction, rotation, slant length used as height and a flag-width error all fit the data at one angle. It asks for one run at a different angle; the ratio does not change, so rotation wins.
+- Measuring the ball and the rail gap then explains why the share of energy in translation is even below 5/7.
+3. Poster figures: the atlas heat maps, the transfer ladder as a fraction of the oracle, and the paired real-run result.
+  ## technical_components
+    [0]
+      - name: labsim: executable physics twins of 12 mechanics experiments with curriculum fault libraries
+      - what: - numpy forward models of each measurement protocol. All share one closed signature vocabulary: y-offset, x-offset, slope scale, bend at high x, scatter too large, scatter too small, drift with trial order, none.
+- Training experiments (the six in the app's registry): friction, average speed, Hooke's law, Newton-2 with hanging mass, momentum with two carts, energy on an incline.
+- Held-out experiments, used only as graders and never in training. Classified in advance as near transfer: inclined-plane friction, Atwood machine, free fall. Far transfer: simple pendulum g, horizontal projectile, lever balance.
+- Each experiment has 4-6 causes, always including 'random error only'. Every cause carries a plain physical description, a signature tag, a fix and a source tag ('literature' or 'assumption'). Examples:
+  - Newton-2: friction not balanced or over-balanced; hanging mass not << cart mass, with relative error (m+m_e)/M; string not parallel to the track.
+  - Hooke: total length recorded instead of extension; hanger mass omitted; ruler zero offset; beyond the elastic limit.
+  - Friction: scale zeroed vertically then used horizontally; upward pull angle; accelerating pull.
+  - Energy: slant length used as height; rolling friction; flag-width error; rotational energy. A solid ball on a flat surface keeps 5/7 of the energy as translation; on two rails the contact radius r < R lowers this to 1/(1 + (2/5)(R/r)^2). Also a 'speed computed from the height' circular-method check, off by default and enabled by the teacher.
+  - Momentum: track not level; friction between the gates; mass mis-entry; common flag-width scale.
+  - Average speed: distance measured front-to-rear; cart not released from rest; slope too steep for manual timing.
+- One cause per training experiment is withheld from training and from the training candidate lists. This is the 'new cause in a known experiment' rung.
+- Noise uses literature values where they exist: manual start-stop interval N(0, 0.10^2 s^2); single-action bias 0.11 s with sd 0.07 s; resolution d/sqrt(12); ruler +/-1 mm; a photogate-bias case of about 5.7%. Where no value exists (spring-scale zero shift, parallax), a wide prior is used and flagged 'assumption'.
+- Menus of 3-6 feasible extra measurements per experiment, each with estimated lab minutes and a simulated outcome.
+- A one-page physics card per cause (formula, signature derivation, source tag) is generated from the code for the student's review.
+      - novelty_vs_prior_art: The physics of each cause comes from textbooks or teacher literature (e.g. He 2016 on (m+m_e)/M; Kok & Priemer 2023 on rotational energy) and is not claimed as new. The verified search found no executable, tested library of systematic-error hypotheses with literature noise for school mechanics experiments that serves as the shared ground truth for diagnosis, protocol audit and model training. CNKI was not searched systematically; the student checks it before claiming novelty.
+      - feasibility_and_memory: - Pure numpy, < 0.5 GB, milliseconds per simulated dataset.
+- About 1.5k lines (estimate), written by the coding assistant 10-31..11-03.
+- Seconds-long analytic unit tests: zero-fault data must recover the ideal law, and large faults must show the hand-derived signature.
+- Independent checks:
+  - the second assistant re-implements the Newton-2 and energy forward models and one two-cause EIG case from the written physics spec (a differential test, logged);
+  - the student reviews every training-experiment physics card on 11-07, before training;
+  - the student hand-codes one fault model himself (Hooke ruler-zero offset).
+- Mechanics only, so every cause can be derived on a whiteboard in the interview.
+      - priority: P0
+    [1]
+      - name: Bayesian diagnosis engine with an honest 'cause not in my list'
+      - what: - Computes a posterior over {random error only, cause_1..cause_K, none of these}.
+- Marginal likelihoods: closed form (Bayesian linear-Gaussian) when a fault is linear in its parameters (offsets, scale factors); grid quadrature otherwise.
+- Nuisance parameters (true k, mu, g-scale, cart mass) are marginalised on grids with weakly informative priors.
+- A posterior-predictive misfit statistic, calibrated on simulation to a fixed false-alarm rate of [5%], triggers 'cause not in my list'.
+- Uncertainty-normalised agreement z = (measured - predicted) / combined standard uncertainty. Proposed bands: consistent |z| < 2, in tension 2-3, inconsistent > 3. The classic relative error is still shown.
+- Emits a fact sheet for the explainer, the verifier and the UI: numbers, units, signs, top causes, counterfactual ghost curves, the fix and the predicted re-run value.
+- Registry v2 replaces physics.py's single-reading forms with multi-point tables and instrument profiles; single readings are still accepted.
+      - novelty_vs_prior_art: The methods are classical: model-based diagnosis (de Kleer & Williams 1987), model discrimination (Box & Hill 1967), Bayesian model comparison in intro labs (Blais 2020). New is automatic, real-time use over a curriculum fault library, evaluated against an oracle and on real runs. Replacing pass/fail with an uncertainty-normalised comparison follows physics-education arguments the student should find and read for himself.
+      - feasibility_and_memory: - Vectorised numpy on the CPU; estimate 1-10 ms per diagnosis and < 0.3 GB; runs inside the product on the Mac.
+- Unit tests: planted-fault recovery, posterior normalisation and an Occam check.
+- Written 11-02.
+      - priority: P0
+    [2]
+      - name: Expected-information-gain advisor and closed loop
+      - what: - For each menu item, a Monte Carlo EIG on the posterior over causes (about 100-256 simulated outcomes), optionally per lab minute.
+- It recommends the best item, says which suspects that item separates, and shows each top suspect's predicted outcome before the student measures.
+- It takes the new reading, updates the posterior and repeats for up to 3 rounds. When no menu item can separate the remaining suspects, it says so plainly.
+- A simulated-student loop drives E3, comparing EIG, EIG per minute, repeat, random choice and a fixed textbook extension.
+- Real-run support for E5: every run records BOTH the EIG follow-up and a plain repeat, in an order taken from a committed random schedule.
+- The same code picks the single clarifying question in recognition (P1).
+      - novelty_vs_prior_art: Choosing measurements by EIG is old (GDE 1987; BOED reviews; NIST optbayesexpt 2021), and BoxingGym (2025) reports that LLMs struggle at EIG-style design. Not found: EIG advice for school mechanics labs, tested in a real physical closed loop against students' usual default of repeating the same measurement.
+      - feasibility_and_memory: Estimate 0.1-1 s per recommendation on the CPU; negligible memory. Written 11-02.
+      - priority: P0
+    [3]
+      - name: Identifiability atlas: the Bayes-optimal limit of school protocols
+      - what: - Monte Carlo Bayes-optimal confusion matrices for each of the 12 experiments under these protocols:
+  - P0, single reading (the old app);
+  - P1, the standard multi-point worksheet as written in the student's textbook (he confirms it);
+  - P1 plus 1 EIG measurement, and P1 plus 2;
+  - controls: P1 plus 1 repeat, and P1 plus 1 random item.
+- Outputs: pairwise confusability; the measurement that resolves each confused pair; sensitivity to fault-size priors and noise (x0.5, x2).
+- It also provides the oracle ceiling that every model arm is normalised against, and the teacher's protocol view.
+- Worked examples the student can derive by hand:
+  - Energy, with only the release height varied at one angle: four causes all give a constant KE/PE ratio below 1. They are slant length used as height (ratio sin theta), rolling friction (1 - mu cot theta), rotational energy (5/7, lower on two rails) and a flag-width error (k^2). One change of angle separates the first two from the last two; measuring the ball and the flag separates the last two.
+  - Hooke: a hanger mass left out of the force, a ruler zero offset and a recorded total length all appear as a nonzero intercept of the F-x line, because with a free slope an x-offset is indistinguishable from a y-offset. Only their typical sizes differ. The atlas measures how often the worksheet confuses them and names the separating measurement (weigh the hanger; read the unloaded spring).
+      - novelty_vs_prior_art: Not found in the literature searched. This is the project's physics-education result, and it stands even if the ML part fails.
+      - feasibility_and_memory: Estimate 1-3 CPU-hours with 4 workers on the Mac, < 2 GB, run on 11-07 while no model is loaded. Before 11-06 it runs only at debug size (n = 20 per cell), with outputs discarded.
+      - priority: P0
+    [4]
+      - name: Signature panel and closed signature vocabulary (the levelling tool)
+      - what: - Code computes the panel for any experiment card (law in linearised form y = f(x), variables, units, instrument resolutions) and data table:
+  - fit of the ideal law with a free scale: slope ratio to ideal and its z;
+  - intercept z;
+  - curvature z (quadratic term);
+  - residual scatter against expected instrument noise (chi^2/dof, too large or too small);
+  - runs test and drift against trial order;
+  - for conservation experiments, the before/after ratio with its uncertainty.
+- The same vocabulary is used by the engine's cause tags, the model's output and the UI's suspect cards.
+- Every arm (base, tuned, 27B, API, classical) receives the identical panel, so a gain cannot come from the fine-tune learning arithmetic. A no-panel ablation measures what the panel itself contributes.
+- In the open-set product path the same code analyses any experiment once the student picks its relation family.
+      - novelty_vs_prior_art: Standard statistics used in a tool-integrated-reasoning pattern (PAL, ToRA). Not claimed as new; its role is to make the comparisons fair.
+      - feasibility_and_memory: numpy, milliseconds. About 300 lines (estimate), written 11-03.
+      - priority: P0
+    [5]
+      - name: Engine-verified fine-tuning of Qwen3.5-4B: S1 engine-target SFT plus the shuffled-label control (the model upgrade)
+      - what: - Adapter: bf16 LoRA, r=16, alpha=32, dropout 0.05, on language-model linear layers whose PEFT names map one-to-one to mlx-vlm's qwen3_5 modules. Start with full-attention q/k/v/o and MLP gate/up/down; add the Gated-DeltaNet projections only if the converter's name-map test passes.
+- Frozen: vision tower, embeddings, lm_head. Non-thinking chat format; loss on assistant tokens only.
+- Input: experiment card; candidate causes as plain physical descriptions, with no signature tags; data table of 1-8 rows (single readings included); signature panel; measurement menu.
+- Output JSON: short evidence; the data's signature; each cause's signature type and probability; p(none of these); the next measurement with the expected result under the top two causes; the z verdict; an explanation of <= 80 words, in Chinese or English (50/50).
+- 20% of examples are cause-proposal tasks: propose up to 6 causes as (variable, signature type, description).
+- S1 targets are written by the engine: posterior rounded to 0.05, the argmax-EIG item, the true signature tags, and a templated explanation with 3 paraphrases per slot.
+- Anti-shortcut measures: cause IDs and their order randomised; magnitude priors overlap.
+- Shuffled-label control: identical prompts, steps and seed, with cause labels permuted within each experiment.
+- Each run is time-boxed to <= 2 h; the example count is set from throughput measured in the first 10 minutes.
+      - novelty_vs_prior_art: Simulator labels and rewards already exist for forward physics QA (Sim2Reason 2026), VLM world-building (PhysEvolve 2026) and physics code (RLVP 2026). Calibration-aware rewards (RLCR) and STaR/RFT are known. New here:
+- the inverse task: the cause from noisy, student-style measurements;
+- the engine posterior as a proper-scoring target;
+- measurement design as an output;
+- transfer measured on held-out experiments as a fraction of the Bayes-optimal oracle.
+It also tests BoxingGym's finding within one domain.
+      - feasibility_and_memory: - RTX 5090: bf16 LoRA of the 4B needs about 10 GB VRAM per Unsloth's Qwen3.5 table. The table does not state a sequence length, so this is verified in the first run. bf16 avoids Unsloth's warning against QLoRA for this family.
+- Estimates: S1 1-2 h; the control 1-2 h, run in the evening.
+- Adapter about 65 MB (estimate).
+- Tooling: Unsloth, falling back to ms-swift, then plain PEFT/TRL.
+- If the sm_120 stack fails, a reduced S1 is trained overnight on the Mac with mlx-vlm (estimate 6-10 GB, never alongside the 27B).
+      - priority: P0
+    [6]
+      - name: S2 expert iteration seeded from S1 (S3 GRPO later)
+      - what: - Merge S1 into the bf16 base, then sample 8 answers per prompt (temperature 0.8) on about 3k fresh training-experiment prompts.
+- Sampling uses vLLM serving the merged model, because vLLM LoRA support for qwen3_5 is unconfirmed; batched HF generate is the fallback.
+- Reward R = format gate x (0.5 x (1 - 0.5 x ||p - q||^2) + 0.3 x EIG(chosen)/max EIG + 0.2 x verifier pass with coverage), where q is the engine posterior.
+- Keep the best sample if R >= a pre-registered threshold, then train one SFT epoch continuing from S1.
+- S3, GRPO on the same reward with a KL penalty to S2, is P2. It runs only if S1, S2 and all controls are finished and the GPU is idle before 11-10; otherwise it moves to Phase 2.
+- Deployment rule (pre-registered, not a claim): the product ships S2 only if it beats S1 by >= [1] pp top-1 on the in-distribution validation split with no faithfulness regression. Otherwise it ships S1.
+      - novelty_vs_prior_art: Expert iteration / rejection-sampling fine-tuning (Yuan 2023; STaR, Zelikman 2022) with a bounded proper-scoring term (RLCR) and an engine-computed EIG term. The controlled SFT-vs-RFT comparison on held-out experiments tests the 'RL generalises, SFT memorises' prediction (Chu et al., ICML 2025) in a measurement-diagnosis domain.
+      - feasibility_and_memory: Estimate 1-2 h of sampling plus 1 h of SFT on the 5090 (the merged 4B in bf16 is about 9 GB, plus KV cache). Seeding from S1 rather than the untuned base fixes the low-acceptance risk the judges found.
+      - priority: P1
+    [7]
+      - name: Hi-fi misspecified simulator (test-only sim-to-real proxy)
+      - what: - Adds effects the engine never models: pulley inertia and friction, rolling resistance, air drag, string mass, ex-Gaussian (skewed) timing noise and occasional transcription slips.
+- Produces a frozen 300-case robustness split, with a pre-registered accuracy drop measured against in-distribution.
+- Supplies the outcomes of the closed-loop continuations in C2a, so EIG is tested under misspecification.
+- Also feeds the booth Judge Challenge tables and the practice mode.
+      - novelty_vs_prior_art: A deliberate physics gap between the training world and the test world is a stronger proxy than noise-only misspecification. It is not claimed as a new method.
+      - feasibility_and_memory: numpy extensions of labsim, about 300 lines (estimate), written by the assistants on 11-06. The student generates the set, freezes it and hashes it before any model is evaluated on it.
+      - priority: P0
+    [8]
+      - name: Evaluation harness: pre-registration, levelled baselines, controls, statistics, logs
+      - what: - Seeded test sets are regenerated identically on the Mac and the server. Their SHA-256 hashes are compared and appended, dated, to the signed plan before any training; the files themselves are never uploaded.
+- A leakage checker must catch a planted duplicate.
+- One prompt contract for all arms: same card, candidates, panel and schema (constrained decoding where supported), greedy decoding, 512 new tokens. Thinking is off for local arms; API arms use their lowest reasoning setting (logged).
+- Controls: oracle-in-prompt, swapped-table, unmodelled faults (two causes at once; a x10 transcription slip), clean data, and large obvious faults.
+- Non-LLM references: gradient-boosted trees on panel features that predict the data signature, and a 20-line rule matcher. Both are given the oracle cause-signature tags.
+- Statistics: exact McNemar; Wilcoxon signed-rank; Wilson and Clopper-Pearson intervals; paired and experiment-level cluster bootstrap (10,000 resamples); TOST; Holm; mixed-effects logistic regression as a sensitivity analysis; Brier; ECE with reliability diagrams; AUROC.
+- Every local and API prompt and response is logged as JSONL with model id, build, settings and timestamp.
+- Formal-run launcher: only the student starts formal runs. It asks for his name, writes a dated notebook stub, and refuses to run if the plan hash is missing.
+      - novelty_vs_prior_art: Method, not novelty. It follows the measurement-first discipline of the Gewu paper the student studied: criteria fixed before runs, baselines levelled on grader, budget, tool and prompt, and positive controls. That paper reports a naive gain of about +22 pp falling to about +2 pp once levelled, which is why levelling is built in from the start.
+      - feasibility_and_memory: CPU-light. About 800 lines (estimate), written 11-04.
+      - priority: P0
+    [9]
+      - name: Fact-sheet explainer, claim verifier and scripted mode
+      - what: - For registered experiments, the local model writes <= 120 words, using only the engine fact sheet.
+- In open-set mode it writes from its own JSON, and the text is labelled 'AI estimate - not physics-verified'.
+- A rule-based verifier (Chinese and English) extracts every number with its unit, every direction word (larger/smaller, 偏大/偏小), the named cause and the recommended measurement, and checks each against the fact sheet.
+- It also requires coverage (the top cause, one numeric piece of evidence, the next measurement), so vague text cannot pass.
+- The model gets one rewrite; after that a fixed template is used.
+- Scripted mode (templates only, no generated text) is the default for every lesson.
+      - novelty_vs_prior_art: Motivated by measured error rates of LLM lab assistants: more than 1 in 10 answers harmful (Kregear et al. 2025), and about 20% of feedback containing errors (Maus et al. 2025). Grounded generation plus checking is common. A physics fact-sheet verifier for lab feedback, validated against a blinded audit, was not found.
+      - feasibility_and_memory: The verifier runs in milliseconds on the CPU. 4B generation takes a few seconds (estimate).
+      - priority: P0
+    [10]
+      - name: Product integration, local serving and memory watchdog
+      - what: - Extends the existing Streamlit app. YOLO, the correction canvas and manual selection of the six experiments stay.
+- explain_api.py (the GLM API) is removed. A local client talks to mlx_vlm.server, which provides JSON schema output, logprobs and thinking off by default; an automatic check confirms that no reasoning text comes back.
+- intent_classifier.py keeps its rules; the local VLM replaces the GLM fallback.
+- New: multi-point tables with instrument profiles, the agreement meter, the suspect board, ghost curves, the next-measurement card with predicted outcomes, an optional predict-first step, the verdict with fix-and-verify, scripted mode, and the open-set 'Other experiment' path.
+- Laptop tier only (Qwen3.5-4B plus the adapter). The 27B never runs alongside the app.
+- Watchdog (psutil, polling every 2 s): sums the footprint of every process we start and logs the peak. Above [21] GB it refuses to start new jobs. Above [23] GB it stops the simplest task first, in this order:
+  - the browser preview tab;
+  - CPU batch jobs (checkpointed);
+  - the eval client (checkpointed per item);
+  - the YOLO worker (fallback: manual apparatus entry);
+  - the in-flight LLM request (fallback: template);
+  - the model server, last.
+      - novelty_vs_prior_art: Engineering. It removes the external GLM dependency and makes the offline booth possible.
+      - feasibility_and_memory: Estimate 5.5-8 GB for the whole product, to be measured on 11-09. The assistants write the UI code 11-04..11-08; before 11-06 it is launched only briefly, with the owner's OK.
+      - priority: P0
+    [11]
+      - name: Adapter deployment path and parity gate
+      - what: - PEFT-to-mlx-vlm converter: renames keys; transposes PEFT lora_A (r, in) to lora_a (in, r) and lora_B (out, r) to lora_b (r, out); sets scale = alpha/r. Before 11-06 it passes a round-trip test on tiny random tensors and a name-map test.
+- Serving: mlx_vlm.server --adapter-path on lmstudio-community Qwen3.5-4B-MLX-4bit, reusing the folder lms downloaded, so there are no duplicate copies.
+- Gate: a 200-case parity test (>= 95% identical top-1) plus the adapter-effect check.
+- Fallbacks:
+  - mlx-vlm's dequantise-add-requantise fuse into the 4-bit model (never mlx_lm.fuse, which drops the vision tower);
+  - Mac-native mlx-vlm SFT from engine traces;
+  - ship v1 with the untuned 4B plus the engine, and swap the adapter in at v1.1.
+      - novelty_vs_prior_art: Engineering. LM Studio cannot load LoRA adapters, so without this path the upgrade could not run on a school laptop.
+      - feasibility_and_memory: The adapter is about 65 MB, about 11 minutes even at 100 KB/s. The converter is about 150 lines (estimate), written 11-04.
+      - priority: P0
+    [12]
+      - name: Real fault-injection kit (student researcher only)
+      - what: - Experiments: 3, chosen by kit availability among Hooke's law, friction and Newton-2. Newton-2 is used only if a photogate or ticker timer exists; otherwise average speed with a distance-reference fault replaces it.
+- Conditions: clean plus 3 causes per experiment, x 2 repeats. A seeded random schedule is committed with its hash before each session, and the student draws the conditions himself on sealed cards.
+- Each experiment includes at least one cause pair that the atlas predicts the standard worksheet confounds.
+- Data are typed into CSV and frozen (hashed) before any software sees them.
+- Every run continues with BOTH the EIG follow-up and a repeat, in a committed random order.
+- The kit also measures the vertical-to-horizontal zero shift of the school's spring scales and, on >= 6 runs, the fix-and-verify prediction.
+- No photos, no names and no other person's data. No condition manipulates or measures the student's own reaction time; timing faults are simulated only.
+      - novelty_vs_prior_art: Fault injection is a classic validation method. Using it to validate an AI lab diagnoser and an EIG advisor on real school apparatus was not found.
+      - feasibility_and_memory: About 10-15 min per run (estimate); 24 runs over two sessions. Form 3 covers falling masses, springs and carts, with safety glasses.
+      - priority: P0
+    [13]
+      - name: Open-set recognition: rules first, Set-of-Mark VLM fallback, one question, candidate sets, minimal pairs
+      - what: - The existing rule classifier runs first.
+- On ties or 'other', the local 4B sees the photo (<= 1024 px) with numbered YOLO boxes (Set-of-Mark) and fills a JSON schema:
+  - single-letter codes, A-F for the six experiments and G for other, so token logprobs are clean;
+  - an open-vocabulary name;
+  - configuration cues (hanging mass over a pulley, two carts facing each other, tilted track, horizontal dynamometer);
+  - the apparatus list.
+- The proven cart+track tie is settled by one deterministic question, 'What will you measure?'. When cues are only partial, the question is chosen by EIG.
+- Split-conformal candidate sets, calibrated on source-grouped splits. They are reported per source group as small-n and never described to users as 'guaranteed'.
+- Minimal pairs from existing boxes: inpaint the decisive apparatus (OpenCV Telea) and, as a matched-artifact control, apply the same mask and fill to background.
+- Data hygiene: person screening with the COCO yolov8n.pt already in the project folder; pHash de-duplication; splits grouped by EXIF session or source video.
+      - novelty_vs_prior_art: Open-set recognition, conformal prediction for zero-shot VLMs (Silva-Rodriguez et al., CVPR 2025), clarification under ambiguity (CLAM) and minimal-pair tests (Winoground, MMVP, NaturalBench) all exist. Not found: set-valued experiment recognition with one clarifying question, and equipment-level minimal pairs with matched-artifact controls.
+      - feasibility_and_memory: - Inference only.
+- Estimate a few seconds per image on the 4B, and about 20 s per image for the 27B baseline in an overnight batch with nothing else loaded.
+- Built by the second assistant from 11-06.
+- The in-domain data are few and clustered: 3 source videos, a few photo sessions, no in-domain Hooke photos. Hence P1, with honest small-n statistics.
+      - priority: P1
+    [14]
+      - name: Judge Challenge, practice mode and teacher protocol view
+      - what: - Booth: 12 paper sabotage cards (no QR codes or URLs). The judge picks a card and a fault size, the hi-fi simulator generates the table, and the app must name the culprit within <= 3 extra measurements, offline on the 4B tier. Precomputed scenarios are the fallback.
+- The same code provides a practice mode for ordinary teaching (find a planted fault with the fewest measurements) and the teacher's assessment mode (evidence shown, verdict hidden).
+- Protocol view: the atlas heat map for today's worksheet, plus the one protocol change that fixes most confounds.
+      - novelty_vs_prior_art: Product framing. Tracker overlays a model someone builds by hand, and PhET simulates ideal worlds; neither infers the fault behind a student's own data.
+      - feasibility_and_memory: Reuses labsim, the engine and the UI; negligible memory. Built only after P0 is complete, and cut first if time runs short.
+      - priority: P1
+    [15]
+      - name: Later phases written into the plan now (nothing can be added after the affiliated fair)
+      - what: Phase 2 (Dec 2026 - Feb 2027):
+- S3 GRPO, if not already run;
+- a Qwen3.5-9B scale point;
+- more real runs (toward about 60) with the same method;
+- a vision-side counterfactual LoRA on minimal pairs with source-grouped splits;
+- a sympy law compiler with a dimensional check for unregistered experiments;
+- the 27B on the full test set via llama.cpp GGUF on the server.
+Phase 3 (conditional, not before Dec 2026): the IRB-approved classroom study (E9).
+      - novelty_vs_prior_art: Adds scale, vision-side and field evidence; no new method.
+      - feasibility_and_memory: Each phase is listed with the same methods and metrics, so later data collection stays within the approved plan.
+      - priority: P2
+  - model_upgrade: WHAT IS MODIFIED
+The language side of Qwen/Qwen3.5-4B. It is an official Apache-2.0 vision-language model with native image and video input. It uses the same qwen3_5 hybrid architecture (Gated DeltaNet + gated attention) as the student's Qwen3.8-27B, and its MLX 4-bit build is 3.06 GB.
+- Adapter: bf16 LoRA, r=16, alpha=32, dropout 0.05, on language-model linear layers whose PEFT names map one-to-one to mlx-vlm's qwen3_5 modules.
+- Full-attention q/k/v/o and MLP gate/up/down come first. The Gated-DeltaNet projections are added only if the converter's name-map test passes, because vLLM packs some of them (in_proj_qkv with in_proj_z, in_proj_b with in_proj_a).
+- Frozen: vision tower, embeddings, lm_head. Non-thinking chat format; loss on assistant tokens only.
+- Adapter size about 65 MB (estimate).
+
+SKILL TAUGHT
+Input:
+- an experiment card: the law in linearised form, variables, units and instrument resolutions;
+- candidate causes written as plain physical descriptions, with no signature tags, plus 'random error only';
+- the data table (1-8 rows);
+- the code-computed signature panel;
+- a menu of 3-6 feasible extra measurements.
+Output, in a fixed JSON schema:
+- short evidence and the data's signature;
+- for each cause, its predicted signature type and probability;
+- p(none of these);
+- the most informative next measurement, with the expected result under the top two causes;
+- the z verdict;
+- an explanation of <= 80 words in Chinese or English.
+In 20% of examples the cause list is withheld, and the model proposes up to 6 causes as (variable, signature type, description).
+
+DATA SOURCE
+- About 20,000 prompts; the final count is set by measured throughput.
+- Generated on the rented GPU server by seeded labsim code, from the six curriculum experiments only.
+- Labelled by the Bayesian engine: the posterior rounded to 0.05, the argmax-EIG menu item, each cause's signature tag, and a templated bilingual explanation.
+- One cause per curriculum experiment, and all six held-out experiments, never appear in training.
+- No human labels, no frontier-API outputs, no student data. Only code is uploaded.
+
+TRAINING
+- S1, engine-target SFT (P0, the primary arm): one time-boxed run (<= 2 h or 2 epochs) with one pre-specified checkpoint.
+- Shuffled-label control (P0): the same prompts, steps and seed, with cause labels permuted within each experiment.
+- S2, expert iteration (P1): sample 8 answers per prompt from the merged S1 model on about 3k fresh training prompts. Keep the best one if reward R >= a pre-registered threshold, where R = format gate x (0.5 x (1 - 0.5 x ||p - q||^2) + 0.3 x EIG(chosen)/max EIG + 0.2 x verifier pass with coverage) and q is the engine posterior. Then train one SFT epoch continuing from S1.
+- S3, GRPO on the same reward (P2): only if the GPU is idle before 11-10; otherwise Phase 2.
+- Tooling: Unsloth, falling back to ms-swift, then plain PEFT/TRL.
+- Weights, thresholds, step counts and the deployment rule are committed before training.
+
+COMPUTE LOCATION
+- Rented RTX 5090 (32 GB). bf16 LoRA of the 4B needs about 10 GB VRAM per Unsloth's Qwen3.5 table. The table does not state a sequence length, so this is verified in the first run. Training in bf16 avoids Unsloth's warning against QLoRA for this family.
+- The environment is set up on 11-06 with no data: PyTorch for CUDA >= 12.8 (needed for sm_120), transformers >= 5.2, flash-linear-attention and causal-conv1d.
+- Evaluation and S2 sampling serve merged models with vLLM's qwen3_5 class (its LoRA support is unconfirmed), falling back to batched HF generate.
+- Throughput is measured in each job's first 10 minutes, and every job is time-boxed.
+- If the stack fails, a reduced S1 is trained overnight on the Mac with mlx-vlm (estimate 6-10 GB, nothing else loaded).
+
+DEPLOYMENT PATH
+1. The adapter (about 65 MB) goes to the Mac via a private Hugging Face repo or direct download.
+2. A PEFT-to-MLX converter renames keys, transposes lora_A/lora_B and sets scale = alpha/r.
+3. mlx_vlm.server --adapter-path serves it on lmstudio-community Qwen3.5-4B-MLX-4bit, with JSON schema, token logprobs and thinking off by default. This server is needed because LM Studio cannot load adapters.
+4. A 200-case parity gate (>= 95% identical top-1) and the adapter-effect check must pass.
+Fallbacks: mlx-vlm's dequantise-add-requantise fuse into the 4-bit model (never mlx_lm.fuse, which drops the vision tower); or ship v1 with the untuned 4B plus the engine and swap the adapter in at v1.1.
+In the product, the engine supplies the probabilities for the six curriculum experiments and the tuned model writes checked explanations. For any other experiment, the tuned model's diagnosis is shown, labelled 'AI estimate'.
+
+HOW IT IS MEASURED
+- Primary (C3): top-1 cause accuracy on 720 held-out-experiment cases, S1 vs the untuned 4B, exact McNemar, also reported as a fraction of the Bayes-optimal oracle. It counts only if the shuffled-label control gains < 2 pp.
+- Ladder (secondary, Holm): in-distribution, noise-shift, withheld-cause, hi-fi misspecified world, and near- vs far-transfer held-out experiments. Also S2 vs S1, EIG-regret, Brier/ECE, per-cause signature accuracy, recall@6 of proposed causes, faithfulness, and non-inferiority to the untuned 27B.
+- References, all under the identical contract: engine and oracle; GBT and the rule matcher with oracle tags; the 3-shot in-context base; no-panel ablations; two frontier APIs.
+- Must not change (TOST): photo recognition within +/-5 pp; PhyX-300 within +/-3 pp.
+- Deployment: Mac/server parity, memory and latency.
+- Stated in advance as 'no upgrade': S1 not better than base on the held-out experiments, or better only in-distribution.
+
+WHY THE 4B, NOT THE 27B
+- bf16 LoRA of the 27B needs about 56 GB, more than the card's 32 GB.
+- Unsloth advises against QLoRA for Qwen3.5, and a bnb-4bit-trained adapter on the MLX affine 4-bit base is untested.
+- The 27B alone already takes 18.5-21 GB of the 24 GB cap, so it cannot run beside the app.
+- The 4B fits 8 GB school laptops.
+The 27B stays the zero-shot generalist that the 4B specialist is compared against on the same Mac.
+
+CONSIDERED AND NOT ADOPTED
+- Counterfactual vision tuning on the 809 images (only 3 source videos); moved to Phase 2.
+- The 24-family simulator.
+- 9B GRPO as the headline.
+- Distilling an API teacher.
+- 27B QLoRA.
+- Letting the VLM read gauges (MeasureBench: the best model reaches 30.3% on real images), so readings stay manual.
+  ## experiments
+    [0]
+      - name: E1 Identifiability atlas (tests C1)
+      - data: labsim with literature-calibrated noise for the 6 curriculum and 6 held-out experiments. The fault library is frozen by hash after the student's review.
+      - arms_and_baselines: - Protocols: P0 single reading (old app); P1 standard worksheet; P1 + 1 EIG measurement; P1 + 2 EIG measurements.
+- Controls: P1 + 1 repeat; P1 + 1 random menu item.
+- Sensitivity, for the curriculum experiments: fault-size priors x0.5 and x2; noise x0.5 and x2.
+      - metrics_and_stats: - Bayes-optimal top-1 accuracy (MAP under the true generative model) with Wilson 95% CIs.
+- Full confusion matrices.
+- Pairwise Bayes accuracy, and the list of robustly confounded pairs (< [0.6] in every sensitivity setting).
+- For each confounded pair: the resolving measurement and its pairwise accuracy.
+- Protocol differences by paired bootstrap on the same simulated cases.
+      - sample_size: 500 simulated datasets per experiment x protocol cell, and 300 per cause pair (Wilson half-width about +/-4.4 pp at 0.5). Estimate 1-3 CPU-hours with 4 workers.
+      - human_participants_status: None; purely computational.
+    [1]
+      - name: E2 Engine validity, calibration and honesty
+      - data: Frozen synthetic splits:
+- in-distribution: 600 (100 per curriculum experiment);
+- noise-shift: 300 (Student-t errors with nu = 3, doubled timing sigma, coarser resolution);
+- withheld-cause: 300;
+- clean: 150;
+- unmodelled: 150 (two simultaneous causes; a x10 transcription slip);
+- hi-fi misspecified: 300.
+The 6 held-out engines act as graders. External realism check: the simulated spread of pendulum-g estimates against a published student distribution (SD 0.28 m/s^2 over 271 values), which the student must locate and read himself before using it.
+      - arms_and_baselines: - The old app: relative error < 15% means verified; it cannot name causes.
+- A rule checklist (intercept sign, curvature, ratio < 1), written before seeing test data.
+- The engine with literature noise.
+- The oracle with the true generating parameters.
+      - metrics_and_stats: - Top-1 and top-3 accuracy, macro-F1.
+- False-alarm rate on clean data.
+- 'Not in my list' rate and AUROC on unmodelled cases.
+- Brier score, log score, ECE with reliability diagrams.
+- Exact McNemar for engine vs checklist.
+- Degradation under noise shift and in the hi-fi world, with paired bootstrap CIs.
+- Ratio of simulated to published spread, with a bootstrap CI.
+      - sample_size: 2,250 cases; seconds to minutes of CPU.
+      - human_participants_status: None.
+    [2]
+      - name: E3 Simulated closed loop (tests C2a)
+      - data: 840 cases: 600 in-distribution and 240 from held-out experiments. Each is continued with extra measurements generated by the hi-fi simulator, and again by labsim as an in-model check.
+      - arms_and_baselines: - EIG.
+- EIG per lab minute.
+- Repeat the last measurement (students' usual default).
+- A random menu item.
+- A fixed textbook protocol extension.
+      - metrics_and_stats: - Primary for C2a: the engine posterior of the true cause after one extra measurement, EIG vs repeat, paired Wilcoxon signed-rank.
+- Secondary: posterior after two extra measurements; top-1 after 1 and 2 (exact McNemar); measurements needed to reach posterior 0.9 (Kaplan-Meier, log-rank).
+- Holm correction across the non-primary strategy comparisons.
+      - sample_size: 840 cases x 5 strategies, paired, in two worlds.
+      - human_participants_status: None.
+    [3]
+      - name: E4 Model upgrade and transfer ladder (tests C3, the primary; secondaries S-a to S-h)
+      - data: Frozen test sets, with hashes in the signed plan before training:
+- in-distribution: 600;
+- noise-shift: 300;
+- withheld-cause: 300;
+- held-out experiments: 720 (6 x 120), plus 120 cause-proposal tasks;
+- hi-fi: 300;
+- clean: 150;
+- unmodelled: 150;
+- swapped-table control: 150;
+- oracle-in-prompt: 100;
+- closed-loop single-step decisions: 600.
+A separate 300-case in-distribution validation split is used only for early stopping and the deployment rule.
+      - arms_and_baselines: - References: the engine (Bayes-optimal under our assumptions) and the oracle; gradient-boosted trees on panel features plus oracle cause tags; the 20-line rule matcher plus oracle tags.
+- Qwen3.5-4B untuned, both zero-shot and with 3 in-context examples drawn from training experiments.
+- 4B-S1 (primary); 4B-S2 (P1); 4B-S3 (P2).
+- 4B shuffled-label LoRA (negative control).
+- No-panel ablations of base and S1.
+- Qwen3.8-27B untuned, non-thinking: the deployed MLX 4-bit build on the Mac, run overnight alone on a stratified 800-case subset (360 of them held-out).
+- Two frontier API models, precomputed on 600 stratified synthetic cases each, with the same contract and schema via structured outputs; model versions and dates logged; schema failures count as wrong.
+- Every arm gets the identical prompt contract, inputs, schema, greedy decoding and 512-token budget.
+      - metrics_and_stats: - Primary: top-1 cause accuracy on the 720 held-out cases, S1 vs base, exact McNemar. Also reported as a fraction of the oracle, with an experiment-level cluster bootstrap CI. Valid only if the shuffled-label control gains < [2] pp.
+- Secondary (Holm):
+  - the ladder (in-distribution, noise-shift, withheld-cause, hi-fi);
+  - S2 vs S1;
+  - EIG-regret (Wilcoxon);
+  - Brier, log score, ECE;
+  - signature-type accuracy for the candidate causes;
+  - recall@6 of proposed causes, matched automatically on variable and signature type;
+  - false alarms;
+  - non-inferiority vs the 27B (margin [3] pp).
+- Also reported:
+  - per-experiment and near- vs far-transfer breakdowns (classified in advance: near = inclined-plane friction, Atwood, free fall; far = pendulum, projectile, lever);
+  - mixed-effects logistic regression with an experiment random intercept, as a sensitivity analysis;
+  - JSON validity, latency and peak memory.
+      - sample_size: - About 3,800 cases per server-side 4B arm, run in bf16 and batched; well under 1 h per arm (estimate).
+- Power estimate: 720 paired cases at about 22% discordance give about 0.8 power for a 5-pp difference (normal approximation).
+- The 27B subset (800 cases at an estimated 30-40 s each) takes about one night.
+- API arms: 600 cases each.
+      - human_participants_status: None; simulator data only.
+    [4]
+      - name: E5 Real closed-loop validation on the student's own apparatus (tests C2b)
+      - data: The student's own measurements on school apparatus; no photos.
+- 3 experiments x 4 conditions x 2 repeats = 24 runs. The conditions are clean plus 3 causes, including at least one pair the atlas says the worksheet confounds.
+- Each run is followed by BOTH the EIG measurement and a repeat, in a committed random order (48 follow-ups).
+- Also: the spring-scale zero shift (>= 10 readings per scale, >= 3 scales), and fix-and-verify on >= 6 runs.
+- Phase 2 extends toward about 60 runs with the same method.
+      - arms_and_baselines: - Engine.
+- 4B-S1 (or S2 if shipped).
+- 4B base.
+- 27B (batch).
+- The old app.
+- The rule checklist.
+- Within each run: the EIG follow-up vs the repeat follow-up.
+      - metrics_and_stats: - C2b: gain in the engine posterior of the sealed cause, EIG vs repeat, paired Wilcoxon.
+- Top-1 against the sealed condition, before vs after the extra measurement (exact McNemar).
+- Wilson CIs per arm; false alarms on clean runs.
+- Simulator realism: residual scatter against literature noise (chi^2/dof).
+- Spring-scale zero shift as mean +/- SD; fix-and-verify agreement.
+      - sample_size: 24 runs plus 48 follow-ups (estimate 4-6 h over two sessions). Power estimate: 24 paired runs detect a standardised effect of about 0.6 (Wilcoxon, alpha 0.05, power 0.8). Wide CIs are reported; for example, 18/24 correct gives about 55-88%.
+      - human_participants_status: Exempt as long as:
+- the student is the only person who measures and uses the software;
+- no information about anyone else is recorded;
+- no human variable is studied (no reaction-time manipulation; timing faults are simulated only).
+An adult may be present only for safety supervision, and this is written into the plan. Confirm with the SRC in writing. Form 3 covers masses, springs and carts.
+    [5]
+      - name: E6 Explanation faithfulness and verifier validity (tests S-f)
+      - data: Explanations from every arm in E4 and E5. A stratified, blinded sample of 150 for the student's own audit (arm labels hidden; about 2 h).
+      - arms_and_baselines: - 4B base.
+- 4B-S1/S2.
+- 27B zero-shot.
+- 27B given the engine fact sheet (an explain-only reference, P1).
+- API arms.
+- Templates.
+Each is run with and without the verifier gate.
+      - metrics_and_stats: - Verifier-flagged unsupported or wrong claims per explanation.
+- Rewrite and template-fallback rates; coverage.
+- Verifier precision and recall against the blinded audit, with Wilson CIs.
+- Arm comparisons by exact McNemar with Holm.
+- Stated limitation: the rater is the researcher.
+      - sample_size: Several thousand explanations checked automatically; 150 audited by hand.
+      - human_participants_status: None: the student researcher is the only rater. Ratings by teachers or classmates would be human-participant data and are excluded.
+    [6]
+      - name: E7 Recognition (P1) and what-must-not-change checks (TOST)
+      - data: - Images from the 809-image annotated set that pass person screening and provenance clearance, grouped by source (3 video sources; photo sessions split by EXIF time).
+- 150-300 external CC BY / CC BY-SA images and keyframes (Commons stills, Getaclass, Physics Wikiexperiments), with a licence manifest and labels verified by the student.
+- 150-250 minimal pairs with matched-artifact controls.
+- 300 PhyX items (MIT licence).
+      - arms_and_baselines: - The current rule classifier.
+- Rules plus the 'What will you measure?' question, with answers simulated from the ground-truth cue table.
+- 4B base.
+- 4B-S1 (the no-harm check; if it fails, a second base-model server handles recognition, adding about 3-4 GB).
+- 27B, overnight batch, nothing else loaded.
+- Two frontier APIs, on CC images only.
+All use the same Set-of-Mark input at <= 1024 px and the same schema.
+      - metrics_and_stats: - Top-1 on registered experiments; tie-resolution rate.
+- Unknown-experiment AUROC from letter logprobs.
+- Split-conformal coverage and set size per source group (small-n; no guarantee claimed).
+- Flip rate for decisive vs control masks (exact McNemar over image pairs).
+- TOST: 4B-S1 vs base recognition within +/-[5] pp, and PhyX within +/-[3] pp (90% CI).
+- Latency vs image size; cluster bootstrap by source.
+      - sample_size: - Estimate about 250 independent photos (if cleared), plus up to 3 video clusters sampled at 10 frames each.
+- 150-300 CC images; 150-250 minimal pairs; 300 PhyX items.
+- If the existing images are not cleared, E7 rests on the CC set alone.
+      - human_participants_status: None, provided the images show apparatus only and their provenance is cleared. Public images are cited with their licences. Anything showing identifiable people is cropped, blurred or excluded.
+    [7]
+      - name: E8 Engineering criteria on the Mac
+      - data: - Scripted sessions of 30 photos and 30 diagnoses with networking disabled.
+- 200 parity cases.
+- 50 timed runs per scenario.
+      - arms_and_baselines: - Product with the 4B and adapter vs product with the untuned 4B.
+- The 27B alone, for the memory and latency comparison.
+- Server bf16 adapter vs the Mac 4-bit build.
+      - metrics_and_stats: - Peak summed memory from the watchdog log, against the caps.
+- Median and 90th-percentile latency per stage.
+- Schema-valid rate.
+- Offline pass/fail.
+- Manual-selection checklist.
+- Parity (top-1 agreement, Cohen's kappa) and the adapter-effect check.
+      - sample_size: 60 interactions plus 200 parity cases; estimate 1-2 h.
+      - human_participants_status: None; the student is the only tester.
+    [8]
+      - name: E9 Conditional classroom study (Phase 3, IRB path, not before Dec 2026)
+      - data: Collected only after a 3-member school IRB approves: students' written identification of error sources on a predict-observe-explain worksheet, with vs without the scripted Detective card. Data are group-level and de-identified by an adult.
+      - arms_and_baselines: Scripted Detective card vs the same lesson without it, or a crossover over two lessons with different faults.
+      - metrics_and_stats: A rubric the student adapts from published measurement-reasoning instruments that he finds and reads himself. Pre-registered group-level tests (McNemar, or rank tests) with Wilson CIs.
+      - sample_size: Set in the IRB application (estimate: one or two classes). Small samples from one class threaten anonymity, so only aggregates are reported.
+      - human_participants_status: Human-participant research. Required before any recruitment:
+- Form 4 signed by an educator who is not the sponsor, a school administrator, and a medical or mental-health professional;
+- written minor assent plus parental permission, with any worksheet or survey attached;
+- adult consent;
+- de-identification by an adult;
+- template-only outputs;
+- a written IRB/SRC ruling on showing app output to participants, given the Companion Guide's advice.
+The feature is called 'error-source analysis' in every document. If the study is not approved, it is not run, and nothing from any classroom appears anywhere in the project.
+  - data_plan: D1 SYNTHETIC (labsim; the primary data). Everything is generated by seeded code, and only code travels.
+- Training pool, server only: about 20,000 prompts from the six curriculum experiments; the count is set by throughput.
+  - Protocol mix: single reading, standard worksheet, and after one extra measurement.
+  - Task mix: 20% cause-proposal tasks; 25% 'random error only'.
+  - Chinese and English 50/50; cause IDs and order randomised; 3 paraphrases per text slot.
+  - Labels: the engine posterior, the EIG of every menu item, the cause signature tags and the fact sheet.
+- Withheld from training: one cause per curriculum experiment, and the six held-out experiments entirely.
+- Frozen test sets as listed in E2-E4, plus a 300-case in-distribution validation split.
+- Test sets are regenerated identically on the Mac and the server and their hashes compared. The hashes and the generator version are appended to the signed plan, dated, before any training.
+
+D2 LITERATURE PARAMETER TABLE
+Each entry has a value, unit, source, page and a 'read and verified by the student' tick. Anything without a source is marked 'assumption' and varied in the sensitivity analysis.
+
+D3 REAL RUNS (E5)
+- One CSV per run: run id, experiment, sealed condition code, readings, instrument profile, timestamps.
+- Frozen by hash before diagnosis.
+- No names, faces or data about anyone else.
+
+D4 EXISTING IMAGES (P1; evaluation only, never training)
+- 809 annotated images: about 241 photos plus 568 frames from 6 clips of 3 source videos.
+- Source: data/dataset.zip in the public GitHub repo. The server pulls it directly; the Mac downloads it after 11-06 with the owner's OK.
+- Before any use:
+  - the student confirms provenance;
+  - COCO person screening, then blur, crop or exclude;
+  - splits are grouped by source;
+  - frames of videos whose licence is unclear are excluded and never displayed.
+- The 34 'openclaw' images and the 25-photo intent set are used only if their provenance is cleared and the SRC agrees.
+
+D5 EXTERNAL OPEN-SET IMAGES (P1; test only)
+- Commons stills, plus keyframes from topic-labelled CC BY 3.0 (Getaclass) and CC BY-SA 4.0 (Physics Wikiexperiments) videos.
+- Fetched through the API within its limits: compliant User-Agent, <= 200 requests/min, <= 2 parallel media downloads, <= 25 Mbps, 960/1280 px thumburls from the API, sha1 de-duplication.
+- A manifest records title, author, URL and licence for each file.
+- Inclusion criteria are fixed before any model output is seen. Titles serve only as candidate labels; the student verifies each one.
+- Target 150-300 images (estimate; modern school setups are a minority on Commons).
+
+D6 MINIMAL PAIRS (P1)
+Generated by seeded code from the boxes of cleared images, with matched-artifact controls.
+
+D7 GENERAL-PHYSICS NO-HARM SET
+300 fixed PhyX items (MIT licence), pulled on the server.
+
+D8 LOGS
+Every local and API prompt and response is kept as JSONL, for reproducibility and the Form 2A attachment. The AI ledger lives in docs/AI_USAGE.md.
+
+NOT USED
+- Data from the earlier five classroom sessions, or from any lesson from 11-07 on.
+- Images showing identifiable people.
+- Frontier-API outputs as training data.
+- Any real student data in training.
+
+STORAGE
+Server data are deleted when the rental ends; only adapters, logs and summaries are kept. Data on the Mac stay under 1 GB.
+  - compute_and_memory_plan: MAC (M4 Pro, 48 GB; hard cap of 24 GB for everything we run together; about 38-39 GB free disk)
+
+Product, laptop tier (estimates; measured on 11-09):
+- mlx_vlm.server with Qwen3.5-4B MLX 4-bit: 3.06 GB weights + about 0.07 GB adapter + 1-2 GB KV cache and vision transients at 8k context and <= 1024 px
+- Streamlit: 0.3-0.5 GB
+- YOLOv8s on the CPU: < 1 GB
+- engine: < 0.3 GB
+- one browser tab: 0.5-1 GB
+- total: about 5.5-8 GB (EC2 target <= 8 GB)
+
+Baseline mode (overnight, the 27B alone):
+- Qwen3.8-27B MLX 4-bit (the 16.08 GB file), served by mlx_vlm.server from the folder lms downloaded.
+- 8k context; images capped at 1024 px with --max-pixels; thinking off, checked on every reply.
+- Bionic quit; no Streamlit, YOLO, browser or CPU batch jobs.
+- Estimated footprint 18.5-21 GB, plus an eval client < 0.5 GB that checkpoints after every item.
+- Estimated throughput (prefill about 115 tok/s, decode about 14 tok/s): about 100 text cases or about 180 images per hour.
+- Two LLMs are never loaded together.
+
+CPU jobs (atlas, engine validation, closed loop, test-set generation): < 2 GB with <= 4 workers, never during baseline mode.
+
+Fallback training, only if the server stack fails: mlx-vlm LoRA of the 4B on the 4-bit base, batch 1-2, sequence <= 1,536, gradient checkpointing. Estimated 6-10 GB, run alone overnight on reduced data.
+
+Watchdog:
+- Polls every 2 s.
+- Above 21 GB, no new job may start.
+- Above 23 GB it stops the simplest task first: browser tab, then CPU batch, then eval client, then YOLO worker, then the in-flight LLM request, then the model server.
+- An MLX allocator limit is set by a small wrapper where the installed version supports it (to verify).
+
+Before 11-06 (light work only):
+- Code, seconds-long numpy tests, and debug-size runs with outputs discarded.
+- Only with the owner's OK: install mlx-vlm in a venv and download the 4B MLX build (3.06 GB) for one probe of <= 10 minutes (schema, logprobs, thinking off) on synthetic inputs.
+- The 16 GB 27B download, and any job longer than about 1 h, wait until 11-06.
+
+Disk:
+- 27B 16.08 GB + 4B 3.06 GB + adapters < 0.5 GB + venv, data and images about 2-3 GB = about 22-23 GB.
+- An optional fused 4B adds about 3 GB.
+- Keep >= 8 GB free.
+- In November: no 9B, no bf16 bases and no fused 27B on the Mac.
+
+RTX 5090 (32 GB; rented 11-06 to about 11-10; jobs strictly one at a time)
+
+Set-up on 11-06, before signatures, with no data:
+- A pinned image with PyTorch for CUDA >= 12.8 (needed for sm_120), transformers >= 5.2, flash-linear-attention and causal-conv1d. The Gated DeltaNet kernels compile on the first run.
+- Unsloth, falling back to ms-swift, then PEFT/TRL.
+- vLLM with the qwen3_5 model class, falling back to batched HF generate.
+- Weights from Hugging Face or the ModelScope mirror: Qwen3.5-4B in bf16 (about 9 GB, estimate) and Qwen3.5-0.8B for a 10-step smoke test on debug data. Smoke-test outputs are discarded and recorded as development.
+
+Formal jobs, launched by the student from 11-07 (estimates):
+- task generation: 10-20 min of CPU
+- base-model eval: < 1 h
+- S1: <= 2 h
+- merge + S1 eval: < 1 h
+- shuffled-label control: 1-2 h + eval
+- S2 (P1): sampling 1-2 h + SFT 1 h + eval
+- ablations and in-context arms: < 1 h
+- PhyX TOST: < 0.5 h
+- S3 GRPO (P2): 4-8 h, only if the GPU is idle
+- core total: about 8-14 GPU-hours
+
+VRAM:
+- 4B bf16 LoRA: about 10 GB (Unsloth figure).
+- vLLM serving the merged 4B with gpu_memory_utilization about 0.7: estimate 20-22 GB.
+- GRPO: estimate 16-28 GB.
+
+Throughput is measured in each job's first 10 minutes. The training-set size is the free parameter; the test sets never change.
+
+TRANSFER
+- Up: code only, via git (KB).
+- Down: adapters (about 65 MB each) and JSONL results (tens of MB), via a private Hugging Face repo or direct download.
+- No merged or bf16 model crosses the link.
+
+FRONTIER API BASELINES
+- Launched by the student from the Mac with his own keys (light HTTP calls).
+- Up to 600 synthetic cases and up to 150 CC images per model, cached.
+- A budget cap is written into the plan (estimate: tens of US dollars).
+- Never called by the product or at the booth.
+  - schedule: TAGS
+- [AI-light]: coding assistant on the Mac, short runs only. All work before 11-06 is of this kind.
+- [AI]: assistant coding from 11-06 on.
+- [HEAVY]: long GPU or LLM jobs, only from 11-06; formal runs only after the signatures.
+- [STUDENT]: done by the student himself, including launching every formal run.
+- [OWN-WORDS]: written by the student with no AI drafting. AI may later polish the grammar of his finished text, and that is logged.
+- [GPT]: the second assistant, from 11-06.
+The README version table and badge are updated with every change, per the owner's rules.
+
+10-31 Sat [AI-light]
+- Keep this design as an idea record and save this workflow's prompt logs for Form 2A.
+- New branch, docs/AI_USAGE.md ledger, prompt-log folder.
+- labsim core API and the signature vocabulary; Newton-2 and Hooke models with fault libraries; analytic unit tests (seconds each).
+- Watchdog skeleton.
+
+11-01 Sun [AI-light]
+- Friction, average speed, momentum and energy models, including the two-rail rolling correction.
+- Measurement menus with lab minutes.
+- Literature-parameter table with an empty 'verified by student' column.
+- Physics-card generator.
+
+11-02 Mon [AI-light]
+- Bayesian engine: closed-form and grid evidence, nuisance marginalisation, 'not in my list', z agreement, fact sheet.
+- EIG advisor and simulated closed loop.
+- Registry v2 in physics.py.
+- Unit tests.
+
+11-03 Tue [AI-light]
+- The six held-out engines.
+- Signature panel.
+- Split generators: in-distribution, shift, withheld-cause, held-out, clean, unmodelled, swapped-table, oracle.
+- SHA-256 freezer; leakage checker with the planted-duplicate test.
+- Atlas at debug size (n = 20 per cell, outputs discarded).
+
+11-04 Wed [AI-light]
+- Prompt contract and JSON schema (English and Chinese); templates; claim verifier.
+- Evaluation harness and statistics library; GBT and rule references.
+- mlx_vlm.server client with the no-reasoning check.
+- PEFT-to-MLX converter with round-trip and name-map tests.
+- API runner (dry run only).
+- UI start: GLM removed, multi-point tables, agreement meter.
+
+11-05 Thu [AI-light]
+- Server scripts: bootstrap with ModelScope fallback, generation, S1 and control configs, merge plus vLLM/HF eval, S2 filter, Mac fallback trainer.
+- Formal-run launcher.
+- UI v0.9 for the teacher's ordinary lessons: suspect board, next-measurement card, scripted mode as default, manual selection kept.
+- Student briefing pack:
+  - plain-language notes on each component;
+  - derivation exercises;
+  - the official checklist of research-plan sections;
+  - the list of thresholds he must choose;
+  - the SRC questions;
+  - interview questions.
+  It contains no plan text and no source list.
+- Hand-off note for GPT.
+- Optional, with the owner's OK: install mlx-vlm and run one <= 10-min probe of the 4B on synthetic inputs.
+
+11-06 Fri: student day 1; GPT joins
+- [STUDENT] Read the briefing pack (2 h).
+- [STUDENT] Email the fair: what the 11-15 deadline requires, and its local AI rules.
+- [STUDENT] Email the SRC: continuation scope; prior data; the adult's safety-only role in E5; citing works first mentioned in an AI conversation; whether ordinary teaching use, with nothing collected, sits outside the project.
+- [OWN-WORDS] Research plan covering every phase through spring 2027, with his chosen thresholds and restated hypotheses; Project Addendum template.
+- [STUDENT] Forms 1A, 1B (with a parent), 1 (Adult Sponsor) and 3; start Forms 7 and 2A.
+- [AI] Rent the 5090; bootstrap the environment; compile kernels; run the 0.8B smoke test (development; outputs discarded).
+- [AI] Write the hi-fi simulator.
+- [HEAVY] Mac: download the 27B MLX build (16.08 GB, network).
+- [GPT] Independent physics review of the curriculum physics cards.
+- [GPT] Independent re-implementation of the Newton-2 and energy forward models and of one two-cause EIG case, as a differential test.
+- [GPT] Start the recognition P1 code.
+
+11-07 Sat: formal start once the forms are signed
+- [STUDENT] Review the six training-experiment physics cards (2-3 h) and sign off the library hash.
+- [STUDENT] Hand-code the Hooke ruler-zero fault and compare it with the engine; record it in the notebook.
+- [STUDENT launches] Generate and freeze all test sets (hi-fi included) on both machines, and append the hashes to the plan with the date.
+- [STUDENT launches] Atlas (E1), engine validation (E2) and closed loop (E3) on the Mac CPU (1-3 h).
+- [HEAVY, STUDENT launches] Server chain:
+  1. training pool;
+  2. base-model eval;
+  3. S1 (<= 2 h);
+  4. merge and S1 eval;
+  5. shuffled-label control (evening);
+  6. S2 sampling overnight (P1).
+- [HEAVY] Mac overnight: the 27B diagnosis subset, run alone.
+- Teacher's lesson, if any: ordinary teaching with v0.9 in scripted mode. Nothing is collected, observed for the project or reported, and no design change is drawn from it.
+
+11-08 Sun
+- [HEAVY] Server: S2 SFT and eval (P1); in-context and no-panel arms; PhyX TOST.
+- [HEAVY] CPU: GBT and rule references.
+- [STUDENT] Download the adapters, convert them, run the parity gate and the adapter-effect check.
+- [STUDENT] Launch the API baselines.
+- [STUDENT] Review the held-out physics cards.
+- [STUDENT] Commit the real-run schedule (hash) and prepare the sealed cards.
+- [STUDENT] P1: person screening and source labels for the images (1-2 h).
+- [HEAVY] Mac overnight: 27B recognition and minimal pairs (P1), plus any remaining 27B cases.
+- [AI/GPT] UI v1 features: ghost curves, predicted outcomes, fix-and-verify, open-set path. Judge Challenge only if P0 is finished.
+
+11-09 Mon: product v1 freeze
+- v1 = the 4B with S1 or S2, chosen by the deployment rule; the engine; scripted mode as default.
+- [STUDENT] E8 tests (1-2 h).
+- [STUDENT] Lab session 1: about 12 runs, each with both follow-ups.
+
+11-10 Tue
+- [STUDENT] Lab session 2 (about 12 runs); freeze the real-run tables.
+- [HEAVY] All arms on the real tables; the 27B runs overnight.
+- End the GPU rental, unless S3 (P2) is running on an idle GPU.
+
+11-11 Wed
+- [STUDENT] Run the pre-registered analysis notebooks and read every table.
+- [STUDENT] E6 blinded audit (about 2 h).
+- [OWN-WORDS] Interpretation notes in the dated notebook.
+- AI only fixes bugs and regenerates credited figures on request.
+
+11-12 Thu
+- [OWN-WORDS] Results, discussion, limitations, conclusions and future work.
+- [OWN-WORDS] Abstract (<= 250 words), if the fair needs it.
+
+11-13 Fri
+- [OWN-WORDS] Poster text, if needed.
+- [STUDENT] Form 2A (tool list, prompt logs, code ledger); Form 7; a Project Addendum entry for every deviation.
+- Interview drill (AI quizzing allowed, and logged); mock Judge Challenge.
+
+11-14 Sat
+- Consistency check: forms vs plan vs notebook vs results.
+- Freeze and archive the offline demo build.
+- Submit. The rest of the day is buffer.
+
+IF THE SIGNATURES SLIP A DAY
+Every formal step moves one day. Drop P1 items first (S2, recognition, Judge Challenge), never the controls. Lab session 2 can move to 11-11.
+
+VARIANT: 11-15 NEEDS ONLY REGISTRATION, OR PLAN + FORMS
+- 10-31..11-05: unchanged.
+- 11-06..11-08 [OWN-WORDS]: plan and forms written without rushing, with every phase listed (the IRB classroom phase included); submitted by 11-14.
+- Engineering continues, so the teacher still gets product v1 in scripted mode around 11-09. It starts with the untuned 4B plus the engine; the adapter arrives at v1.1 after the formal S1 run.
+- Formal runs start only after the signatures:
+  - 11-09..11-22: E1-E4 and E8;
+  - late November: E5 lab sessions;
+  - December: E6, E7 (P1), S2/S3;
+  - Dec-Feb: Phase 2;
+  - Phase 3 only after IRB approval.
+- [OWN-WORDS] Abstract, poster and paper after the results (Jan-Mar 2027). Affiliated fairs end by 2027-04-12.
+  - isef_compliance: CATEGORY
+ROBO > Machine Learning (alternative: Cognitive Systems; PHYS > Mechanics only if the student makes the atlas the headline). The project is framed as engineering criteria plus three confirmatory hypotheses with quantitative tests and statistics, never as a demonstration or explanation model.
+
+CONTINUATION (Form 7)
+- The June-Oct 2026 system (YOLO + rules + GLM explanation, entered in other competitions and a journal) is prior research.
+- The new line of investigation is: engine-verified training of a laptop VLM for error-cause diagnosis and measurement design; the identifiability atlas; the real closed loop.
+- The board and abstract show only the new work.
+- The earlier five classroom sessions and the 24/25-photo result are not presented.
+- The previous abstract and plan are attached.
+
+FORMS AND TIMING
+- Before any formal run: the research plan (written by the student, listing all phases through spring 2027), Forms 1, 1A, 1B (with a parent) and 3.
+- The ISEF phase starts on the first formal data generation (target 11-07), inside the 12-month window.
+- Development before that date (code, debug runs with discarded outputs) is declared as development.
+- Engineering changes go into a dated Project Addendum.
+- Form 2A carries the tool list and the prompt logs.
+- Form 4 is needed only for Phase 3.
+- Ask the SRC whether a rented GPU needs Form 2C (probably not).
+- The teacher's expert design feedback is allowed only before experimentation starts; after that, no opinions or ratings are collected.
+
+EXEMPT PATH (everything on the 11-14 path)
+- Data: synthetic data; public licensed images; apparatus-only images whose provenance is cleared; the student's own measurements.
+- The student is the only tester and rater, and no human variable is studied (reaction-time faults are simulated only).
+- Lessons from 11-07 on are ordinary teaching run by the teacher in scripted mode: no logging, no collection, no observation for the project, nothing presented, and no design change drawn from them. The SRC is asked in writing to confirm this.
+- Nobody else tests the app for the project. No surveys, no teacher ratings.
+
+IRB PATH (Phase 3, conditional, not before Dec 2026)
+- A 3-member IRB signs Form 4 before any recruitment: an educator who is not the sponsor, an administrator, and a medical or mental-health professional.
+- Written minor assent and parental permission, with any survey or worksheet attached; adult consent.
+- Participation voluntary, with no coercion.
+- An adult de-identifies the group-level data.
+- Outputs are scripted and template-only.
+- A written IRB/SRC ruling on showing app output, given the Companion Guide.
+- Safeguards for anonymity within a small class.
+- The feature is called 'error-source analysis' in all documents.
+- Listed in the plan now, because nothing can be added after the affiliated fair. If it is not approved, it is not run.
+
+GENERATIVE AI (Rule 8)
+- This design and every coding session, with both assistants, are logged for Form 2A.
+- AI-written code is identified per module and function in docs/AI_USAGE.md. Commit messages stay tool-neutral under the owner's rule, so the ledger carries the disclosure.
+- The AI-drafted fault-library physics and templates are disclosed, and the student verifies them.
+- AI does not write the plan, abstract, poster or paper drafts, conclusions or future work.
+- AI supplies no citations and no source list. Every prior-art name in this design is an idea-development pointer from a logged conversation. The student does his own literature search, cites only what he found and read, and asks the SRC how to treat works first mentioned in an AI chat.
+- AI does not collect data. The student launches every formal run and interprets every result. AI runs before the signatures are debug only, and their outputs are discarded.
+- Figures are credited, e.g. 'made by the finalist with matplotlib, 2026; plotting code AI-assisted'.
+- Grammar polishing is allowed only on finished student text, and is logged.
+- Do not paste this design into the plan.
+
+BOOTH
+- Runs fully offline on the 4B tier; the build is frozen before the Display & Safety inspection.
+- API baselines precomputed; the poster stands without power; paper sabotage cards.
+- No QR codes, URLs or email addresses.
+- Every chart and image credited; no images of people.
+- Models described generically in the abstract.
+- Licences recorded: models Apache-2.0, YOLOv8 AGPL-3.0, images CC BY/BY-SA.
+
+INDEPENDENCE
+A dated notebook, the hand-coded fault model, whiteboard derivations, student-launched runs and the blinded audit. The interview (25 points) is drilled on every module.
+  ## risks
+    * Plan or signatures slip past 11-06, so every formal run waits. Mitigation:
+- all tooling is push-button by 11-05;
+- the 4B jobs take hours, so a one-day slip still fits;
+- P1 items are dropped first, never the controls;
+- the variant schedule.
+    * The Qwen3.5 training stack fails on Blackwell sm_120 (Gated DeltaNet kernels, flash-linear-attention, causal-conv1d). Mitigation:
+- the environment is set up on 11-06 with no data;
+- fallback chain Unsloth -> ms-swift -> PEFT/TRL;
+- Mac-native mlx-vlm SFT of the 4B overnight on reduced data;
+- v1 can ship with the untuned 4B plus the engine.
+    * No transfer: C3 fails. Mitigation:
+- the claim is pre-registered, so a miss is reportable;
+- the ladder shows where the gain stops;
+- the controls and the signature-type metric explain why;
+- the atlas, engine and closed loop stand on their own;
+- Phase 2 adds S3 and the 9B.
+    * Physics bugs in AI-written fault models would be invisible to every metric, because the generator and the engine share code. Mitigation:
+- mechanics-only scope;
+- the student reviews the physics cards before training;
+- analytic unit tests;
+- independent re-implementation by the second assistant;
+- the student's hand-coded fault model;
+- the real runs;
+- any correction goes into the Project Addendum and triggers a retrain.
+    * C1 is only as good as the fault library, so it risks being true by construction. Mitigation:
+- causes come from the curriculum and teacher literature, or are flagged 'assumption';
+- the library is frozen by hash before the atlas runs;
+- sensitivity analysis;
+- one predicted confound is tested on real apparatus.
+    * Shortcut learning on synthetic data (ID positions, template strings, magnitude ranges). Mitigation:
+- randomised IDs and order, paraphrases, overlapping priors;
+- noise-shift and hi-fi splits;
+- the swapped-table control and the leakage checker.
+    * The adapter conversion is silently wrong, or the bf16 -> MLX 4-bit gap degrades results. Mitigation:
+- converter tests;
+- LoRA only on modules with one-to-one names;
+- the adapter-effect check and the 200-case parity gate;
+- the fuse or Mac-native training fallbacks.
+    * Sim-to-real gap, or a misspecified engine. Mitigation:
+- literature-calibrated noise;
+- the hi-fi world;
+- real runs and realism checks;
+- claims labelled 'under our simulator's assumptions' until real data exist.
+    * No lab access before 11-12. Mitigation: C2b becomes pending and runs in Phase 2 with the same method; the 11-15 claims rest on simulation, clearly labelled as such.
+    * Breaching the 24 GB cap on the Mac. Mitigation:
+- the product runs on the 4B (about 6-8 GB);
+- the 27B runs only alone, overnight;
+- the watchdog with a fixed kill order;
+- images <= 1024 px and an 8k context.
+    * Runtime quirks: thinking text leaking into replies, invalid JSON, missing logprobs. Mitigation:
+- mlx_vlm.server with thinking off by default, plus an automatic no-reasoning check;
+- schema-constrained decoding and the template fallback;
+- sampling-frequency scores if logprobs fail.
+    * ISEF integrity failure: an AI-drafted plan or abstract, AI-supplied citations, AI-collected data, unapproved human participants, or an undeclared continuation. Mitigation:
+- the rules in this design;
+- the ledger and the prompt logs;
+- student-launched runs;
+- SRC rulings obtained in writing.
+    * Recognition results are fragile: the images are small and clustered (3 source videos), and their provenance is unclear. Mitigation:
+- recognition is P1 and evaluation-only;
+- results reported per source as small-n, with no guarantee claims;
+- the CC set serves as the independent test;
+- uncleared frames are excluded.
+    * Student workload in 9 days. Mitigation:
+- a P0-only critical path;
+- the briefing pack;
+- real runs capped at 24;
+- the variant schedule;
+- the assistants handle all code under the ledger.
+    * The server's region blocks, or slows, Hugging Face or GitHub. Mitigation: confirm before renting; use the ModelScope mirror; transfers stay small (adapters about 65 MB, JSONL results).
+    * Judges ask 'why train a model if the engine is exact?' and challenge the novelty. Mitigation:
+- engines exist only for modelled experiments, and the held-out design measures exactly the skill that is deployed;
+- a prior-art map marks what is new;
+- the student re-checks CNKI and CNIPA.
+    * Reward hacking in S2/S3, e.g. vague text that passes the verifier. Mitigation: the coverage requirement, the blinded audit, and flagged-claim rates reported for every arm.
+    * The 4B may be weak at recognition. Mitigation:
+- rules run first, with one deterministic question;
+- manual selection is always available;
+- E7 measures the 4B against the 27B;
+- a vision-side upgrade is listed for Phase 2;
+- a second base-model server is used if the TOST fails.
+  - why_it_wins: IT IS NOT A DEMONSTRATION
+It makes three falsifiable claims with ground truth:
+- a physics-education finding: which school protocols cannot reveal their own errors, and the one measurement that fixes each;
+- a real physical closed loop: EIG against the students' habit of repeating a measurement;
+- an ML question: does an engine-taught laptop model transfer, measured against the Bayes-optimal ceiling?
+
+A REAL MODEL-LEVEL UPGRADE, AS THE TEACHER DEMANDS
+- The weights of an on-device VLM change through engine-verified training, with no human or API labels.
+- It is judged against levelled baselines (same prompt, panel, schema and budget), a shuffled-label negative control, positive controls, classical references and a 27B generalist on the same laptop.
+- The ladder and the oracle normalisation make even a null transfer result informative.
+
+A CLEAR NOVELTY BOUNDARY
+PhysicsAssistant does perception plus chat. Sim2Reason and PhysEvolve reward forward prediction. GDE and BOED choose measurements in other domains. This project claims the combination, the inverse task, the real closed loop and measured transfer, and no single new method.
+
+USEFUL AND HONEST IN CLASS
+- It replaces the arbitrary 15% rule.
+- It says 'your data cannot tell yet - measure this' and 'cause not in my list'.
+- It gives a fix together with a prediction that verifies it.
+- Scripted mode keeps lessons safe.
+- It runs offline and free on 8 GB school laptops.
+
+INTERESTING
+- Suspect boards, ghost curves and predicted outcomes before measuring.
+- A booth Judge Challenge with paper sabotage cards.
+- The spinning-ball story, derivable on a whiteboard, including why two rails push the translational share below 5/7.
+
+THE OPEN-SET WISH, KEPT SCIENTIFIC
+- Any experiment gets the generic signature analysis and a labelled model estimate.
+- Recognition is rules first, then a VLM fallback and one question; manual selection always wins.
+- How well the skill works on unseen experiments is measured, not claimed.
+
+FEASIBLE INSIDE EVERY CONSTRAINT
+- The 4B bf16 LoRA (about 10 GB VRAM) runs in hours.
+- The CPU-only atlas, engine and loop give results even if every GPU job fails.
+- The product needs about 6-8 GB; the 27B runs only alone, overnight.
+- Only code is uploaded.
+
+COMPLIANCE AS A QUIET ADVANTAGE
+A participant-free core, a listed IRB phase, student-launched runs and a clean AI ledger remove the two most common ways such projects fail to qualify.
+
+IT PLAYS TO THE STUDENT'S PHYSICS FOR THE 25-POINT INTERVIEW
+Every cause is high-school mechanics he can derive and defend: a = (mg - f)/(M + m), (m + m_e)/M, 5/7 and the rail correction, and why an x-offset of a line looks like a y-offset.
+## decision_log
+  * Base design: the lead concept 'Lab Detective', chosen by all three judges. It had the best feasibility and compliance among the high-rigour designs, and two of the judges found no fatal flaw in it.
+  * Fatal flaw fixed (workstation tier): the 27B beside Streamlit, YOLO and a browser came to about 20-23.5 GB, too close to the 24 GB cap. It is removed from the product. The 27B now runs only alone, overnight, as the generalist baseline, and the product ships on Qwen3.5-4B plus the adapter (about 6-8 GB).
+  * Fatal flaw fixed (S2 sampled from the untuned base, with an unknown acceptance rate):
+- the primary arm is now S1 (engine-target SFT, near-certain to exist by 11-08) vs base;
+- S2 becomes expert iteration seeded from merged S1 (P1);
+- a pre-registered deployment rule picks S1 or S2 for the product.
+  * Hypotheses compressed from H1-H8 plus EC1-EC6 to three confirmatory claims:
+- C1, the atlas, reframed around the standard worksheet; the single-reading clause becomes descriptive only;
+- C2, EIG beats repeat, in simulation (hi-fi world) and in real runs;
+- C3, S1 beats base on held-out experiments.
+Everything else is a Holm-corrected secondary, a pass/fail control or an engineering criterion.
+  * Held-out experiments raised from 4 to 6 by adding the Atwood machine and lever balance, cheap numpy experiments taken from model-depth's list. Near vs far transfer is classified in advance, and an experiment-level cluster bootstrap is used.
+  * Levelling grafted from model-depth: a code-computed signature panel is given identically to every arm, with a no-panel ablation, so a gain cannot be arithmetic. The closed signature vocabulary, from wow-product, is shared by the engine, the model output and the UI.
+  * Candidate causes appear in prompts as plain physical descriptions, with no signature tags. The model must infer each cause's signature, which is the transferable physics step; it is measured as S-g. The classical references (GBT on the panel, a 20-line matcher) get oracle tags and answer 'is a language model needed at all?'.
+  * Controls:
+- the lead's H7 row shuffle is replaced by a swapped-table control, since row order carries no information;
+- positive controls added: oracle-in-prompt, planted duplicate, adapter-effect check;
+- negative control added: a shuffled-label LoRA that must gain < 2 pp.
+  * TOST 'must not change' checks were added for recognition and PhyX-300, because the LoRA alters language layers that also serve vision tasks.
+  * The hi-fi misspecified simulator, from wow-product, was promoted to P0. It makes C2a and the in-distribution-to-hi-fi drop non-trivial, and it powers the booth challenge.
+  * Real runs:
+- BOTH the EIG follow-up and a plain repeat in every run, in randomised order (paired test);
+- capped at 24 before 11-14, extended in Phase 2;
+- sealed cards drawn by the student himself;
+- no reaction-time manipulation, and stopwatch-only setups avoided;
+- the spring-scale zero shift is measured;
+- fix-and-verify is exploratory.
+  * Wording fixes:
+- 'Bayes-optimal under our simulator's assumptions' replaces 'exact';
+- 'error-source analysis' in IRB documents;
+- users never see 'guaranteed' coverage.
+  * UX grafts from wow-product: suspect board, ghost curves, predicted outcomes shown before measuring, an optional predict-first step, and fix-and-verify. The Judge Challenge with paper cards and the practice and assessment modes are P1 and share one code path. The fault-universe animation is cut.
+  * Conflict resolved: the ISEF judge cut 'Too-Perfect Twin' as an implied accusation, while the teacher wanted a too-perfect-data suspect. The resolution:
+- no accusation-style suspect;
+- the energy experiment gets a documented method-error check ('speed computed from the height', circular per teacher notes), off by default and enabled by the teacher;
+- 'scatter smaller than instruments allow' stays as a neutral data signature.
+  * Conflict resolved: the ISEF judge cut the classroom sabotage mode, while the teacher grafted a practice mode. It is kept as a P1 ordinary-teaching feature, built only after P0 and never used as a data source.
+  * Classroom from 11-07:
+- ordinary teaching run by the teacher with v0.9 in scripted mode;
+- nothing logged, collected, observed or presented, and no design change drawn from it;
+- the IRB classroom study is listed as a conditional Phase 3;
+- model-depth's anonymous cause-count export is cut.
+  * The briefing pack contains no source list, because a starter bibliography is forbidden. The prior-art names in this design are logged idea-development pointers; the student does his own literature search and asks the SRC how to treat works first mentioned in an AI chat.
+  * Every formal run is launched by the student, through a launcher that writes a dated notebook stub. AI-only runs before the signatures are debug runs, with outputs discarded.
+  * Nothing longer than about 1 h runs before 11-06. The 16 GB download of the 27B moves to 11-06, and the 4B probe is optional, with the owner's OK.
+  * 27B baselines run on the deployed MLX build on the Mac (a stratified 800-case subset). The NVFP4 build on the 5090 (unverified on sm_120) and the thinking-on arms are cut. A full-set GGUF run on the server moves to Phase 2.
+  * LoRA targets are restricted to modules whose names map one-to-one between PEFT and mlx-vlm. Sampling and evaluation use merge-then-serve on vLLM, since its LoRA support for qwen3_5 is unconfirmed, with batched HF generate as the fallback.
+  * Scope stays at 12 mechanics experiments the student can derive and defend. Model-depth's 24-family simulator, its cross-validation folds and its duplicate 4B tier are rejected.
+  * Recognition:
+- rules first, with a Set-of-Mark VLM fallback;
+- one deterministic 'What will you measure?' question for the cart+track tie;
+- conformal sets and minimal pairs with matched-artifact controls as P1 evaluation only.
+CounterLab's CET training and its in-domain coverage guarantee are rejected, since the in-domain images come from only 3 source videos.
+  * Student's open-set wish:
+- P0: an 'Other experiment' path in which the student picks the relation family, code computes the generic panel, and the model's estimate is clearly labelled;
+- P1: the VLM drafts the experiment card;
+- Phase 2: the sympy law compiler.
+  * The energy fault model now includes the two-rail contact-radius correction, translational share = 1/(1 + (2/5)(R/r)^2) < 5/7, anticipating the physics judge's question.
+  * Cut from the November path, all listed in the plan as later phases: the 9B scale point, S3 GRPO (P2, if the GPU is idle), any 27B QLoRA, vision-side LoRA, video and hidden-state probes.
+  * The 15% pass/fail rule is removed from the product and the paper, replaced by an uncertainty-normalised z agreement.
+  * Pre-11-06 coding load trimmed: recognition P1 code, the hi-fi simulator and UI polish move to the assistants' 11-06..11-08 window, so the formal-run tooling is complete by 11-05.
+## questions_for_student
+  * What exactly must you submit to your affiliated fair by 11-15: registration only, the research plan plus signed forms, or a finished project with results and an abstract? Which fair is it, and does it have its own AI rules? (This chooses the main schedule or the variant, and decides whether any result must exist by 11-14.)
+  * Can you write the research plan yourself on 11-06 and get Forms 1 (Adult Sponsor), 1A, 1B (with a parent) and 3 signed that day or on 11-07? Who is your Adult Sponsor? (Every formal data-generation, training and evaluation run waits for these signatures.)
+  * Between 11-07 and 11-12, can you work alone in a lab, with an adult present only for safety? On which days, and for how many hours? Which apparatus is there:
+- springs with slotted masses and a ruler;
+- spring scales (what division and range?);
+- block and board;
+- cart, track and pulley;
+- a photogate or ticker timer, or only stopwatches?
+(This decides the 3 real-run experiments, and whether claim C2(b) can be tested before 11-15.)
+  * Who filmed the 6 video clips behind the 568 frames (IDs 38815401569, 38815465709, 38815466296)? Who took the 241 photos and the 34 'openclaw' images, and do any of them show identifiable people? Who took the 25 intent photos, and did classmates appear in them or supply data? (This decides whether any existing image can be used in E7 or shown on the poster; if not, recognition rests on CC images only.)
+  * What exactly is your prior work? What was entered where (competitions, the journal submission), and on which dates? Were any ISEF forms signed in June? Did classmates use the app in the five earlier classroom sessions? (This sets the Form 7 scope and what must be excluded.)
+  * Are you comfortable with the live app running on a fine-tuned 4B model (about 6-8 GB in total), with your Qwen3.8-27B appearing only as an overnight baseline? The 27B beside the app would sit at the 24 GB cap. (This decides the product model and the 'small specialist vs big generalist' comparison.)
+  * Will your teacher run the lessons from 11-07 as ordinary teaching in scripted mode, with nothing collected? Do you want the later IRB classroom study, and can your school form a 3-member IRB (an educator who is not your sponsor, an administrator, and a medical or mental-health professional)? (This decides whether Phase 3 and its assent and permission documents go into your plan now, and what the 11-07 build must contain.)
+  * Where will you rent the RTX 5090 (provider and region; servers in mainland China may not reach Hugging Face)? What can you spend on GPU time and on API baselines? Do you have your own keys for two frontier models? How fast can a server send files to your Mac? (This decides the mirror, whether S2 and S3 fit, the size or existence of the API baselines, and how adapters travel.)
+  * What is your textbook's standard worksheet for each of the six experiments (e.g. how many loads for Hooke; how many hanging masses at fixed cart mass for Newton-2)? Which of the listed causes have you or your teacher actually seen in your lab? (This sets the 'standard protocol' the atlas tests in C1, and which causes go into the library.)
+  * Do you want the headline to be the model upgrade (ROBO > Machine Learning) or the atlas as a physics-education finding (PHYS > Mechanics)? (This changes which claim leads the plan and the poster; the experiments stay the same.)
+  * In which language will you write the plan and do the interview, and should the student UI default to Chinese? (This sets the bilingual mix of templates and training data.)

@@ -1,0 +1,291 @@
+[0]
+  - lens: isef-judge
+  ## scores
+    [0]
+      - design: model-depth: LabSleuth (simulator-taught 9B lab-error diagnoser)
+      - innovation: 7
+      - interest: 7
+      - scientific_rigor: 8
+      - feasibility: 5
+      - compliance_safety: 8
+      - model_upgrade_credibility: 8.5
+      - continuity_with_prior_work: 7
+      - justification: Best-controlled ML evaluation of the four. Every arm gets the same contract prompt and signature panel. Controls include a shuffled-label LoRA negative control (H7), a gradient-boosted-tree baseline that asks whether an LLM is needed at all, oracle-in-prompt and planted-duplicate positive controls, TOST equivalence tests for what must not change, non-inferiority against the 27B, and Mac/server parity with an adapter-effect check. The 9B bf16 LoRA (about 22 GB per the verified Unsloth table) avoids the QLoRA caveat and is a credible upgrade.
+
+It overreaches. The plan has 24 families with 3-4 faults each, including Ohm, Snell, Boyle, resonance tube, calorimetry and internal resistance, all AI-written in five days. Only six are physics-checked before SFT. Generator and referee share code, so a physics bug is self-consistent and invisible to every metric, and no student can defend 24 fault models in a 15-minute interview.
+
+All confirmatory claims stay inside the simulator:
+- transfer rests on only 6 held-out clusters;
+- accuracy is scored only on items the referee calls identifiable;
+- there is no world with misspecified physics;
+- the only real-data test (E8) is exploratory and may be empty by 11-15.
+
+The claim that a physics engine as the only teacher is new is contradicted by Sim2Reason and PhysEvolve. Heavy runs are not assigned to the student, which risks counting as AI collecting data, and the Mac model downloads start on 11-03.
+      ## fatal_flaws
+        * As scoped: 24 AI-written experiment families, with only the six curriculum families physics-checked before SFT. Because generator and referee share the same code, any physics bug is self-consistent and undetectable by every metric, and the student cannot own or defend 24 fault models in the 15-minute interview (25 points; independence is scored).
+    [1]
+      - design: open-set-vision: CounterLab (counterfactual-tuned, conformal open-set recognition)
+      - innovation: 7
+      - interest: 6
+      - scientific_rigor: 6
+      - feasibility: 6.5
+      - compliance_safety: 7.5
+      - model_upgrade_credibility: 7
+      - continuity_with_prior_work: 9
+      - justification: The most ML-novel training objective of the four: four-term counterfactual evidence tuning with matched-artifact hinge negatives and option dropout. The controls are exemplary on paper: a data-matched SFT control, a box-oracle positive control, a blank-image negative control, an option-order test, group splits, a Beta-law coverage check and a recalibration curve. The identifiability idea ('what you measure, not what you see, defines the experiment') is elegant, and the design reuses existing assets best.
+
+The data cannot carry it. I tallied the repo label files:
+- 568 frames come from only 3 source videos: 253 + 84 friction frames and 231 steel-ball frames.
+- 241 photos show mostly cart and track parts. Only 4 contain a dynamometer, none contain a block or ball, and none show Hooke's law.
+- Friction (2 videos) and the ball (1 video) cannot appear in train, calibration and test from different sources.
+- Labels for which experiment each photo was meant for would be assigned after the fact by the researcher himself.
+After deduplication the independent scenes number in single digits, so held-out-group minimal-pair accuracy and an in-domain 90% guarantee would rest on a handful of scenes. Commons has an estimated fewer than 100 modern photos of the six experiments.
+
+Impact is weak. The upgrade improves a step the student can already do in two clicks, while physics.py's single-reading, 15% core stays unchanged. Training on, and showing poster visuals from, frames of downloaded web videos is a provenance risk. The SRC may also treat the 809-image set as prior-project data, and the claim of a new line of investigation on Form 7 is weaker because the research question (recognition) is the same as before. Prior-art citations are real (CF-VLM, NeurIPS 2025, verified) and are fairly bounded.
+      ## fatal_flaws
+        * The data cannot support the primary endpoint or H3. The 809 images are 568 near-duplicate frames from only 3 source videos (2 friction, 1 steel ball) plus 241 photos of mostly cart and track parts (4 with a dynamometer, 0 of Hooke's law). A group split with friction in every split is impossible, so held-out-group minimal-pair accuracy and the in-domain 90% coverage guarantee rest on a handful of scenes.
+        * physics.py's single-reading, 15%-relative-error core is left unchanged, so the end-to-end product stays a PhysicsAssistant-style demonstration: perception plus explanation. The headline gain improves only a step the student can already do with two clicks of manual selection.
+    [2]
+      - design: wow-product: Lab Sleuth (Finding the Experiment You Actually Ran)
+      - innovation: 8
+      - interest: 9
+      - scientific_rigor: 7
+      - feasibility: 5
+      - compliance_safety: 8
+      - model_upgrade_credibility: 8
+      - continuity_with_prior_work: 7
+      - justification: Best story and best booth. 'A wrong result is an accurate measurement of a slightly different experiment' is memorable, and the suspect boards, ghost curves, fix-and-verify loop and a judge sabotaging the experiment with a paper card would win the room.
+
+The science has strong ideas:
+- a bounded proper-scoring reward (RLCR, arXiv 2507.16806, verified) plus an exact EIG term;
+- a deliberately misspecified hi-fi world (pulley inertia, rolling resistance, drag, string mass, skewed timing) as a sim-to-real proxy;
+- a real blinded sabotage bench that measures both the EIG follow-up and a plain repeat;
+- a protocol audit.
+Prior-art acknowledgements check out (information-gain GRPO in arXiv 2601.17828, verified).
+
+What drags it down:
+- Transfer, its own 'core ML question', rests on 4 training and 3 held-out experiment types.
+- The model reads raw tables with no shared computed signature panel, so mental arithmetic and transferable reasoning are confounded.
+- H4b only has to beat uniform chance.
+- An ECE of at most 0.05 is optimistic.
+- P0 bundles 9B GRPO, a hi-fi simulator and a one-day UI rebuild. The GRPO is tight in 32 GB, and generation may have to go through HF generate on the new hybrid architecture.
+- The student starts on 11-06 and must also complete 24-48 bench runs.
+- 'Too-Perfect Twin' is an implied fabrication accusation that does not belong in a classroom tool.
+- Heavy runs and AI-made tables are not assigned to the student.
+      ## fatal_flaws
+        * The headline ML claim (H3, transfer) cannot be interpreted as designed. Only 4 training and 3 held-out experiment types exist, and the model must infer residual signatures by mental arithmetic from raw tables, with no computed feature panel and no with-panel or no-panel levelling. A null result, the likely outcome, cannot separate failed arithmetic from failed transferable reasoning. It is fixable only by adding a panel and more held-out families.
+    [3]
+      - design: lead-concept: Lab Detective
+      - innovation: 8.5
+      - interest: 8
+      - scientific_rigor: 8.5
+      - feasibility: 7
+      - compliance_safety: 9
+      - model_upgrade_credibility: 8
+      - continuity_with_prior_work: 8
+      - justification: The sharpest research question a physics judge could ask for: how close can a laptop VLM trained only on engine-verified tasks come to the Bayes-optimal limit that the measurement protocol itself sets?
+
+What makes it the winner:
+- The identifiability atlas is a physics-education result that stands even if the ML fails. Four causes all give a constant KE/PE ratio, and one change of angle splits them; the physics checks out.
+- Every model accuracy is reported as a fraction of the oracle.
+- The real fault-injection runs include a cause pair the atlas says the standard worksheet cannot separate, so the simulator makes a falsifiable prediction about real data.
+- Controls are thoughtful: a shuffled-rows control on data use, unmodelled-fault and clean controls, noise misspecification, a realism check against the published pendulum spread, and a precision/recall audit of the verifier.
+- SFT vs RFT vs GRPO on held-out experiments is a real ML question (Chu et al., ICML 2025, verified).
+- The 4B bf16 LoRA (about 10 GB) is the most feasible upgrade on one 5090.
+- Compliance is the most careful: the student launches every formal run, downloads wait until 11-06, the adult's role goes to the SRC, a Phase-3 IRB study is listed now, and scripted mode is the default.
+- The booth example (a steel ball keeping about 5/7 of mgh as translational KE) ties to the existing ball video, and all of it can be derived on a whiteboard.
+
+Weaknesses:
+- Too many hypotheses (H1-H8 plus EC1-EC6), and H1's single-reading clause is nearly true by construction.
+- Only 4 held-out clusters.
+- S2 samples from the untuned base, so yield may be low, and H4's GRPO clause depends on a P1 run.
+- No classical-ML or shuffled-label baseline to answer 'is an LLM needed?'.
+- The workstation tier (27B plus the UI) is estimated at 20-23.5 GB, too close to the 24 GB cap.
+- E5 has only about 24 runs.
+- A physics judge will ask why a ball on two rails keeps less than 5/7, and the student should be ready for that.
+      ## fatal_flaws
+  - winner: lead-concept: Lab Detective
+  ## grafts
+    * From model-depth: add non-LLM baselines on the held-out experiments: gradient-boosted trees trained on the same computed signature features with signature-type labels, plus a ~20-line rule matcher. This answers the judge's first question, 'is a language model needed at all?'. CPU only, minutes.
+    * From model-depth: a shuffled-label LoRA negative control. Same prompts, cause labels permuted within each experiment, trained with the S1 recipe overnight on the 4B (estimated 1-2 GPU-h). Pre-register that it must gain < 2 pp on held-out experiments, which shows any gain comes from the physics-verified labels and not from exposure to the output format.
+    * From model-depth: draw the S2 rejection samples from the S1 adapter instead of the untuned base, or pre-register both. Time-box every GPU job and set the episode count from throughput measured in its first 10 minutes.
+    * From model-depth: positive controls for the deployment and evaluation pipeline. (1) An adapter-effect check in the 200-case Mac/server parity test: the converted MLX adapter must change outputs wherever the server adapter does. (2) An oracle-in-prompt arm that must score about 100%. (3) A planted duplicate that the leakage checker must catch.
+    * From model-depth: raise the held-out clusters from 4 to 6 by adding two cheap numpy experiments from its held-out list (Atwood machine, lever balance). Report near- vs far-transfer per experiment, with a family-level cluster bootstrap.
+    * From model-depth: 'what must NOT change' equivalence tests for the text-only LoRA, using TOST with pre-registered margins: photo recognition on the open-set image set, and a fixed 300-item general physics set (PhyX, MIT licence).
+    * From wow-product: a deliberately misspecified hi-fi test world as a frozen robustness split, with the in-distribution-to-hi-fi accuracy drop as a pre-registered criterion. Effects the engine never models: pulley inertia and friction, rolling resistance, air drag, string mass, ex-Gaussian timing noise, transcription slips. This is a stronger sim-to-real proxy than noise-only misspecification.
+    * From wow-product: in every real E5 run, measure BOTH the EIG-recommended follow-up and a plain repeat of the last measurement, in script-randomised order. H3 then gets a paired, within-run real-world test (Wilcoxon on the realised entropy reduction).
+    * From wow-product: evidence of independence. The student hand-codes one fault model (e.g., Hooke ruler-zero offset) and checks it against the engine, and the second assistant independently re-implements one two-cause EIG case for cross-checking. Both are logged in the AI ledger.
+    * From wow-product: fix-and-verify. Each verdict gives a quantitative fix with a predicted re-run result (e.g., the intercept should become 0 +/- 0.03 N after rebalancing), and E5 can test that prediction on a subset of runs.
+    * From wow-product: a booth Judge Challenge with paper sabotage cards (no QR codes or URLs), run offline on the 4B tier. Ghost-curve overlays show each suspect's predicted outcome before each extra measurement; precomputed scenarios are the fallback.
+    * From open-set-vision, for the P1 recognition track only, as evaluation and never training: matched-artifact controls on every minimal pair, conformal sets plus one EIG question for the cart+track tie, and a curve of coverage against recalibration with m target photos on the external CC-licensed set. Results are reported per source group as small-n.
+  ## must_cut
+    * Hypothesis sprawl in the winner. Keep three confirmatory claims: (1) the atlas, with H1 reframed around which cause pairs the standard multi-point worksheet leaves confounded, since the single-reading clause is nearly true by construction; (2) EIG beats repeat, in simulation and in real runs; (3) the primary H4, S2 vs the untuned base on held-out experiments, reported as a fraction of the oracle. Demote H2, H5-H8 and the S3-vs-S1 GRPO clause to Holm-corrected secondary analyses; EC1-EC6 stay as pass/fail engineering checks.
+    * The 27B workstation tier as a product or booth configuration: 27B plus Streamlit, YOLO and a browser is estimated at 20-23.5 GB, too close to the 24 GB cap. Run the 27B only by itself, in batch, for baselines and parity; the product and demo use the 4B laptop tier.
+    * The 27B NVFP4 arm on the 5090 (vLLM NVFP4 support on consumer Blackwell is unknown). Use the Mac MLX batch subset or GGUF Q4_K_M via llama.cpp instead.
+    * From the 11-14 critical path: the 9B scale point, the Phase-2 vision counterfactual LoRA and the sympy generic-signature compiler. Keep them listed in the research plan as later phases, because nothing can be added after the affiliated fair.
+    * Do not import model-depth's 24-family LabFault scope, its 3-fold family cross-validation, its duplicate 4B tier, its GRPO pilot or its 27B QLoRA.
+    * Do not import open-set-vision's CET training or any in-domain conformal-guarantee claim built on the 809 images (only 3 source videos). Never train on, or display, frames from the downloaded web videos until their provenance and licence are cleared.
+    * Do not import wow-product's 9B GRPO, its 'Too-Perfect Twin' suspect (an implied fabrication accusation is inappropriate in a classroom tool), its classroom sabotage mode or its fault-universe animation before 11-14.
+    * Any model download or continuous job longer than about 1 h before 11-06. Any formal data-generation, training or evaluation run launched by an AI assistant: the student launches each one and logs it in the dated notebook.
+    * Any classroom, teacher-rating or classmate data used as evidence before a 3-member IRB signs Form 4 (the E9 study stays a listed, conditional Phase-3 item). Lessons from 11-07 on are ordinary teaching in scripted mode, with nothing collected.
+    * The fixed 'relative error < 15% = verified' rule, everywhere in product and paper. Replace it with the uncertainty-normalised z agreement.
+[1]
+  - lens: feasibility
+  ## scores
+    [0]
+      - design: model-depth: LabSleuth (simulator-taught Qwen3.5-9B lab-error diagnosis)
+      - innovation: 8
+      - interest: 8
+      - scientific_rigor: 9
+      - feasibility: 5
+      - compliance_safety: 9
+      - model_upgrade_credibility: 9
+      - continuity_with_prior_work: 8
+      - justification: MEMORY: closes easily. The product runs the 9B MLX 4-bit (5.98 GB, about 8-10 GB in total, estimate) and the 27B is never loaded alongside it. It respects the upload, no-new-photo and LM Studio rules: adapters are served by mlx_vlm.server --adapter-path, with a merge-to-GGUF fallback. SCHEDULE: closes only if nothing fails. In six AI-only days it has to deliver: a 24-family simulator (18 training + 6 held-out families, 3-4 errors each with menus, fixes and bilingual 3-paraphrase templates; the '1.5-2k lines' figure is optimistic), the referee, the evaluation harness, the converter and a full product rework. The student then has to write and own H1-H7 plus E1-E8 on the morning of 11-06. SFT launches that night, but the full physics review of the training families is not until 11-08, so any correction means retraining inside the 11-09 window. There is no Mac-side mlx-vlm training fallback. SCIENCE: the best-controlled design of the four: shuffled-label LoRA, a gradient-boosted-tree 'is an LM needed' baseline, a signature panel that levels arithmetic across arms, the L1-shift/L2/L3 transfer ladder, TOST no-harm checks and an adapter-effect positive control. That makes its upgrade claim the most defensible. Gaps: the referee grids only the error magnitude, so nuisance parameters (true k, mu) still need marginalising. vLLM's qwen3_5 class lists Qwen3VLForConditionalGeneration and IsHybrid as bases, not SupportsLoRA, so serving LoRA through it is unconfirmed and merge-then-serve is the safe route. RISKIEST SINGLE STEP: the bf16 LoRA SFT of Qwen3.5-9B on the 5090 on the night of 11-06. It is the first contact with the sm_120 + transformers>=5.2 + flash-linear-attention/causal-conv1d stack, at a sequence length Unsloth's 22 GB figure does not state. Every E1-E7 result and the 11-09 adapter depend on that one time-boxed run.
+      ## fatal_flaws
+        * The schedule closes only if nothing fails. SFT is a single <=4 h run on the night of 11-06, but the full physics review of the 18 training families is on 11-08, so any template correction forces a retrain inside the 11-09 product window.
+        * No Mac-side (mlx-vlm) training fallback if the sm_120 Qwen3.5 stack fails on 11-06. The Qwen3.5-4B fallback runs on the same stack, so it fails the same way.
+        * Pre-11-06 scope does not fit six AI-only days with tests: 24 families x 3-4 errors with menus, fixes and bilingual templates, plus the referee, harness, converter and full product rework. The student must also take ownership of H1-H7 and E1-E8 in a plan written in one morning.
+    [1]
+      - design: open-set-vision: CounterLab (counterfactual-tuned conformal experiment recognition, Qwen3.5-4B)
+      - innovation: 8
+      - interest: 6
+      - scientific_rigor: 5.5
+      - feasibility: 4.5
+      - compliance_safety: 7
+      - model_upgrade_credibility: 6.5
+      - continuity_with_prior_work: 7.5
+      - justification: MEMORY: closes. The recognizer is the 4B (app about 7-8 GB, estimate), and the 27B runs alone under an MLX memory cap. It respects the upload, photo and adapter rules. DATA is where it fails. Recounting the label files in the repo snapshot: the 568 frames are 6 clips from only 3 source videos (about 332-337 friction frames from 2 videos, about 226 steel-ball frames from 1). The 242 photo labels (about 232 distinct shots plus 10 '_inv' duplicates) hold about 95 single-cart+track, about 23 two-cart and about 115 parts-only scenes, and no Hooke setups. So 'held-out source groups', the cluster bootstrap and a 90% +/- 3 pp conformal guarantee checked against the Beta law rest on a handful of non-exchangeable clusters. McNemar over about 1,000 correlated edits overstates n. The primary endpoint is tested on the same synthetic-inpainting distribution CET trains on; natural pairs (20-60) are only exploratory. PRODUCT HEADROOM is small. The rules already settle friction and two-cart scenes, the single-cart tie cannot be decided from pixels by construction, and physics.py's single-reading '<15% verified' path is left untouched. The novelty is real: matched-artifact counterfactual pairs, option dropout and physics-derived set labels. But the planned poster visuals use images that include frames of downloaded videos, with no licence check. RISKIEST SINGLE STEP: the first CET run on 11-07. It is a custom four-term-loss trainer (letter cross-entropy + symmetric KL + hinge vs matched controls + evidence target) on the Qwen3.5-4B VLM that cannot be GPU-tested beforehand. It starts only after the student's same-day labelling and group splits, and its adapter must then be converted, parity-tested and integrated, all on 11-09.
+      ## fatal_flaws
+        * Too few independent source groups for group-held-out testing, a cluster bootstrap or the 90% +/- 3 pp conformal-coverage claim. There are 3 source videos (2 friction, 1 steel ball) plus a few EXIF photo sessions, and no Hooke setups. Effective n is far below the roughly 1,000 edited variants.
+        * The primary endpoint (minimal-pair accuracy) uses the same synthetic-inpainting distribution CET is trained on. Real transfer (20-60 natural pairs) is only exploratory.
+        * Little product gain by 11-09. The rules already settle friction and two-cart photos, the cart+track tie cannot be decided visually, and the single-reading analysis with the 15% rule stays unchanged.
+        * A custom VLM loss trainer that cannot be GPU-tested before 11-07 and the student's same-day labelling both gate the first run. Adapter conversion, the parity test and the product freeze all land on 11-09.
+    [2]
+      - design: wow-product: Lab Sleuth (verifier-trained 9B, SFT then GRPO, sabotage bench)
+      - innovation: 8.5
+      - interest: 9
+      - scientific_rigor: 7.5
+      - feasibility: 5.5
+      - compliance_safety: 8.5
+      - model_upgrade_credibility: 8
+      - continuity_with_prior_work: 8
+      - justification: Best product and booth of the four: suspect board, ghost curves, sabotage mode, paper sabotage cards. It also has the best sim-to-real evidence: a deliberately misspecified hi-fi simulator plus a real blinded sabotage bench. Inputs to the API baselines are synthetic only. MEMORY: closes; the product runs the 9B at about 9-11 GB (estimate), and the 27B runs alone. It respects the upload, photo and adapter rules. FEASIBILITY is weak. The 5090 is rented and bootstrapped only after signatures (the evening of 11-06), so kernel compiles and model downloads eat into the GPU window. The headline 'trained by RL' needs 9B bf16 GRPO inside 32 GB with Unsloth/HF generation. Unsloth's Qwen3.5 RL path requires fast_inference=False, and its Qwen3.5 guide links a GRPO notebook only for the 4B. The student also has to run 24-48 bench runs, each with two follow-ups, on top of the plan, forms, labelling and all the writing in 9 days. H1 (in-distribution vs untuned) is near-certain to pass and so tells little. Transfer (H3) rests on only 4 training experiments. The RFT and 4B fallbacks keep it alive. RISKIEST SINGLE STEP: the overnight GRPO run on 11-07 of Qwen3.5-9B (bf16 LoRA, groups of 6-8, <=320 tokens, HF generation; my estimate is 26-30 GB peak). An OOM, instability or a throughput shortfall there cuts the RL claim back to RFT, with one day left before the 11-09 freeze.
+      ## fatal_flaws
+        * The headline RL claim depends on one overnight 9B bf16 GRPO run inside 32 GB, with generation through Unsloth/HF because the Qwen3.5 RL path disables vLLM, and Unsloth links a Qwen3.5 GRPO example only for the 4B. If it fails, the pitch falls back to RFT with one day left before the 11-09 freeze.
+        * The student's workload does not fit 9 days: 24-48 bench runs, each with two follow-ups, plus the plan, forms, labels and all the writing. The confirmatory H4b fails by default if there is no lab access.
+        * H1 compares an in-distribution fine-tune with untuned models on its own four training experiments, so it is near-certain to pass and adds little evidence. Transfer rests on only 4 training experiments.
+    [3]
+      - design: lead-concept: Lab Detective (engine-verified Qwen3.5-4B, identifiability atlas, EIG closed loop)
+      - innovation: 8.5
+      - interest: 8.5
+      - scientific_rigor: 8.5
+      - feasibility: 7
+      - compliance_safety: 9
+      - model_upgrade_credibility: 8
+      - continuity_with_prior_work: 8
+      - justification: It wins on shippability and gives up little rigour. GPU risk is the lowest: the 4B bf16 LoRA needs about 10 GB VRAM, Unsloth's Qwen3.5 guide ships a 4B GRPO notebook, S1 and S2 take hours, and there is slack to absorb a one-day slip in the plan/forms signing on 11-06 (a bottleneck every design shares). E1-E3 (atlas, engine, EIG loop) are CPU-only and take about 1-2 h on the Mac on 11-07 (estimate), so a quantitative physics-education result exists even if every GPU job fails. MEMORY: the laptop tier (4B MLX 3.06 GB, app about 5-7 GB) fits far below 24 GB and suits 8 GB school laptops. Mac mlx-vlm SFT from engine traces is a real fallback. It also defers the 16 GB download to 11-06, uploads nothing, avoids LM Studio for adapters, and avoids measuring a human variable in the real runs (no stopwatch-based setups). Oracle-normalised transfer, unmodelled-fault and shuffled-row controls, and a verifier validated against a blinded audit make the upgrade claim defensible. WEAKNESSES: (a) the workstation tier puts the 27B next to Streamlit, YOLO and a browser at an estimated 20-23.5 GB, with no margin under a 24 GB cap and a 23 GB kill threshold; (b) S2 samples from the untuned base under a fixed threshold; (c) H1 is partly true by construction and only as good as the AI-written fault library, so it needs the sensitivity analysis; (d) eight hypotheses are too many for a plan the student writes on 11-06. RISKIEST SINGLE STEP: S2, the reward-filtered self-training sampled from the untuned 4B. Its acceptance rate under the pre-registered threshold is unknown until 11-07, and the primary endpoint (S2 vs base on held-out experiments) depends on it. Fix: run S2 as expert iteration from S1.
+      ## fatal_flaws
+        * As specified, the workstation tier keeps the 27B (18.5-21 GB) loaded alongside Streamlit, YOLO and a browser: about 20-23.5 GB, inside the 24 GB cap only at the low end, so it would routinely trip the 23 GB watchdog in class. Fix: run the 27B as a batch-only baseline.
+        * S2, the arm behind the primary endpoint, samples from the untuned 4B under a fixed pre-registered reward threshold. With low acceptance it cannot differ from base. Fix: expert iteration from S1, or pre-register S1 vs base as the primary comparison.
+  - winner: lead-concept: Lab Detective
+  ## grafts
+    * From LabSleuth (model-depth): a classical-ML baseline (gradient-boosted trees on the same code-computed signature features) to answer 'is a language model needed at all?'.
+    * From LabSleuth: a shuffled-label LoRA negative control (same tasks, cause labels shuffled within each experiment), to show any gain comes from engine-verified labels rather than exposure to the output format.
+    * From LabSleuth: cheap extra transfer rungs. (1) Experiment-cause pairs withheld from training and from the training candidate lists. (2) A shift split with heavier-tailed noise, coarser resolution and doubled timing noise. Each arm gets one pre-specified checkpoint, and the eval-set SHA-256 hashes are appended to the signed plan before training.
+    * From LabSleuth: positive controls. (1) An arm with the oracle answer in the prompt, which must score about 100%. (2) A converter unit test on a tiny synthetic adapter, run before 11-06. (3) An adapter-effect check after PEFT-to-MLX conversion: the Mac adapter must change outputs wherever the server adapter does.
+    * From LabSleuth: TOST equivalence ('must not change') checks after the text-only LoRA, on photo recognition over the people-screened image set and on a fixed 300-item PhyX (MIT-licensed) general-physics subset.
+    * From LabSleuth: set up the 5090 environment before signatures, with no data (pinned CUDA >= 12.8 image, Gated-DeltaNet kernel compile). Measure throughput in each job's first 10 minutes and time-box every job.
+    * From Lab Sleuth (wow-product): the deliberately misspecified hi-fi simulator as a test-only sim-to-real proxy split. It adds effects the engine never models: pulley inertia and friction, rolling resistance, air drag, string mass, ex-Gaussian timing noise and transcription slips.
+    * From Lab Sleuth: at the booth, a judge challenge with paper sabotage cards (no QR codes). In the app, ghost-curve overlays of each top cause's prediction on the student's points, plus a quantitative fix-and-verify step that gives the fix and its predicted re-run result.
+    * From Lab Sleuth: the student hand-codes one fault model himself (e.g. a Hooke ruler-zero offset) and checks it against the engine, as independence evidence for the interview. During the real runs he also measures how far the spring scale's zero shifts between vertical and horizontal use; the literature search found no value for it.
+    * From Lab Sleuth: a closed vocabulary of signature types (y-offset, x-offset, slope scale, bend, scatter too large/small, drift, none), shared by the engine, the model output and the UI, as the explicit scaffold for transfer to held-out experiments.
+    * From CounterLab (open-set-vision): restrict LoRA targets to the language-model linear layers whose names map one-to-one onto mlx-vlm's qwen3_5 implementation; vLLM packs in_proj_qkv+in_proj_z and in_proj_b+in_proj_a. Serve every local model through mlx_vlm.server from the folders lms downloaded, so there are no duplicate 16 GB copies, and logprobs and thinking-off are available by default.
+    * From CounterLab: person screening with the COCO yolov8n.pt already in the project folder. Any image split is grouped by EXIF session or source video, with pHash de-duplication. The P1 minimal-pair test adds matched-artifact control masks.
+  ## must_cut
+    * Lab Detective's workstation tier in the interactive product, i.e. the 27B loaded alongside Streamlit, YOLO and a browser (about 20-23.5 GB estimated). The 27B runs only as an overnight batch baseline with nothing else loaded.
+    * S2 sampled from the untuned base as the primary-endpoint arm. Either sample S2 from S1 (expert iteration), or pre-register S1 vs base as the primary comparison.
+    * S3 GRPO and the 9B scale point from the critical path to 11-14. They are P1, run only if S1 and S2 are finished and the GPU is idle; otherwise they move to December.
+    * The 27B thinking-on arm and the NVFP4 27B server evaluation (vLLM NVFP4 on sm_120 is unverified). Use llama.cpp GGUF on the server or the Mac overnight run instead.
+    * Hypotheses beyond about four confirmatory ones. Demote H2, H5, H7 and H8 to engineering criteria, controls or exploratory analyses, so the student can write and own the plan on 11-06 and the Holm-corrected family stays small.
+    * The phase-2 vision counterfactual LoRA and the sympy generic-signature engine as November work. Keep them only as listed later phases of the plan.
+    * Any 27B QLoRA, in every design: Unsloth advises against QLoRA for Qwen3.5, and transferring a bnb-4bit-trained adapter to the MLX affine 4-bit base is untested.
+    * From CounterLab: the custom four-term CET trainer, and any in-domain conformal 'guarantee' claim resting on 3 source videos and a few photo sessions.
+    * From LabSleuth: the 24-family LabSim, the family cross-validation folds and the parallel 4B tier, all before 11-14.
+    * From Lab Sleuth: 9B GRPO as the headline, the 48-run bench target before 11-14 (cap it at 24) and the fault-parameterised 'experiment you actually ran' animation.
+    * Any data from classroom use, from classmates or from teacher ratings without prior IRB approval, and any live API call in the product or at the booth.
+[2]
+  - lens: teacher-per
+  ## scores
+    [0]
+      - design: LabSleuth (model-depth)
+      - innovation: 7.5
+      - interest: 7
+      - scientific_rigor: 8
+      - feasibility: 4.5
+      - compliance_safety: 7.5
+      - model_upgrade_credibility: 8.5
+      - continuity_with_prior_work: 7
+      - justification: Teacher view: the product side targets real lab misconceptions. It nudges for repeats and a varied independent variable, replaces the 15% rule with an uncertainty budget and a z verdict, adds a predict step and a detective card with one next measurement, and has a classroom mode that shows only referee results and checked templates. Its ML evaluation is the most rigorous of the four: a shared signature panel levels out arithmetic, and it adds a shuffled-label LoRA, a classical-ML probe ('is an LLM needed at all?'), in-context and no-panel controls, TOST no-harm checks and eval hashes fixed before training. But the research moves to 24 synthetic families (Ohm, Snell, Boyle, calorimetry, thin lens and more) with roughly 80 AI-drafted fault models, many with priors tagged 'assumption'. The student can check only the six curriculum families before SFT. The same unchecked referee then grades the model, so a physics mistake can never show up in the metrics, and he cannot defend the non-mechanics families in the 25-point interview. Held-out-family 'transfer' partly comes down to matching panel signatures against a shared error-pattern list; the GBT probe may match the LLM. That is honest, but it weakens the upgrade story. 'Physics is the only teacher' and 'exact referee' overstate what is really an AI-drafted simulator with Monte Carlo EIG. The plan is written in one morning and the AI runs the pre-registered analysis, both Rule 8 risks. Weakest feasibility of the four.
+      ## fatal_flaws
+        * Physics breadth the student cannot verify in time: about 80 AI-drafted fault models across 24 families (optics, electricity and thermal included), most priors tagged 'assumption'. Only the six curriculum families get checked before SFT. The same unchecked referee labels the training data and grades every arm, so template errors are invisible in the results, and the student cannot defend most families in the interview. As scheduled for 11-14 the ground truth is effectively AI-authored.
+    [1]
+      - design: CounterLab (open-set-vision)
+      - innovation: 7
+      - interest: 4
+      - scientific_rigor: 6.5
+      - feasibility: 6
+      - compliance_safety: 7
+      - model_upgrade_credibility: 7
+      - continuity_with_prior_work: 8.5
+      - justification: Clever ML: matched-artifact counterfactual pairs, option dropout to train a 'not listed' answer, group-aware conformal sets checked against their theoretical Beta law, and a data-matched SFT control with two seeds. It is the most direct answer to the 'recognise any experiment' wish and the closest continuation of the 809-image work. Its 'What will you measure?' question for the cart+track tie is a nice touch. As a teacher I rate its classroom value lowest. Students do not struggle to know which experiment they are doing; the teacher assigns it. physics.py's single-reading '<15% = verified' logic is left unchanged, so nothing addresses systematic versus random error, single readings or what to measure next, and there is no classroom closed loop. The data cannot carry the claims. There are 3 source videos and a few photo sessions, Hooke is absent, and average speed, Newton-2 and energy share one cart+track look. Held-out-group results therefore rest on a handful of independent scenes, and exchangeability is doubtful. The line shown to students, '90% guaranteed... calibrated on photos like yours', overclaims coverage that is only marginal. The design trains on, and plans to display, frames from online videos whose provenance is unchecked. Its custom four-term VLM loss is the riskiest code path, and students will find it dull.
+      ## fatal_flaws
+        * It solves a problem students do not have and leaves the one they do have untouched. The experiment is assigned by the teacher; physics.py's single-reading '<15% = verified' rule stays; there is no help with systematic error or the next measurement, and no classroom closed loop.
+        * Its central claims rest on very few independent scenes: 3 source videos plus a few photo sessions, Hooke absent, and three experiments sharing one cart+track appearance. Held-out-group minimal-pair accuracy and in-domain conformal coverage cannot be established with useful confidence.
+        * It tells students a set is 'guaranteed' and 'calibrated on photos like yours'. The coverage is marginal and rests on exchangeability, so the claim is false in a new classroom until the set is recalibrated.
+    [2]
+      - design: Lab Sleuth (wow-product)
+      - innovation: 9
+      - interest: 9.5
+      - scientific_rigor: 7.5
+      - feasibility: 5.5
+      - compliance_safety: 8.5
+      - model_upgrade_credibility: 8
+      - continuity_with_prior_work: 8
+      - justification: The best classroom idea of the four. 'A wrong result is an accurate measurement of a slightly different experiment' replaces 'human error' with physics. The suspect library matches faults I actually see: friction unbalanced or over-balanced, m not << M, a spring scale zeroed vertically and then used horizontally, distance measured nose-to-tail, pendulum length to the top of the bob, and v computed from sqrt(2gh), which makes data 'too perfect'. Ghost overlays, predicted outcomes shown before measuring (predict-observe-explain), a quantitative fix-and-verify loop, sabotage practice and paper judge cards will engage 14-17-year-olds and judges alike. Compliance is careful: Path A/B, scripted mode, reaction-time and elastic-limit faults simulated only, Form 3, one fault model hand-coded by the student, and only synthetic inputs sent to the APIs. Weaknesses: (1) The posterior is closed-world: it always names one of 4-6 suspects and has no 'none of these'. (2) The model gets no levelled feature panel, so any gain may just be arithmetic. (3) There is no negative training control, and the student knows each planted bench fault. (4) Two of the three held-out experiments (momentum, energy) are ones the product's engines already cover, not the 'other' experiments the model is actually deployed for. (5) GRPO on the hybrid 9B as a P0 item, plus the heaviest UX build, strain the 11-09 date. (6) The pitch says the reasoning comes from the 9B, when the engine produces the curriculum diagnoses. (7) It overuses the word 'exact'.
+      ## fatal_flaws
+        * Closed-world diagnosis. The posterior is always forced onto one of 4-6 listed suspects or Just Noise, with no out-of-model check. Any real unmodelled fault (pulley friction, a digit slip, two faults at once) gets a confident wrong culprit. That is harmful on real classroom data and contradicts the design's own honesty goals. It is fatal for classroom use unless a posterior-predictive 'not in my list' check is grafted in.
+    [3]
+      - design: Lab Detective (lead-concept)
+      - innovation: 8.5
+      - interest: 8
+      - scientific_rigor: 8.5
+      - feasibility: 6.5
+      - compliance_safety: 8.5
+      - model_upgrade_credibility: 8
+      - continuity_with_prior_work: 8.5
+      - justification: The best overall base for a project that has to work both in class and at ISEF. Its primary science is an identifiability atlas: what the single-reading protocol and the standard worksheet can reveal at all, and which one extra measurement resolves each confused pair. That is a real physics-education result, and it survives if training fails. It quantifies the old app's single-reading limit, which gives a strong continuation story, and it hands teachers an actionable protocol view. It is honest by design: 'cause not in my list', 'your data cannot tell yet', bracketed thresholds, a 'no upgrade' outcome stated in advance, and accuracy reported as a fraction of the Bayes-optimal oracle. The worked energy example is correct and derivable on a whiteboard: the ratios sin theta, 1 - mu cot theta, 5/7 and k^2 are separated by one change of angle. The steel-ball booth story is truthful. The 4B upgrade is cheap, feasible and relevant to school laptops. Transfer is tested on the 'other' experiments the model would actually serve (near transfer, so a success is modest). Real runs use sealed cards and avoid stopwatch-only setups; lessons stay teacher-run and scripted; SRC rulings are requested in writing. Needs fixing: (1) H7's row shuffle removes no information, because each (x, y) pair stays intact. (2) S2 is sampled from the weak base and may yield few accepted traces. (3) The real-run EIG-versus-repeat test needs both follow-ups measured on every run. (4) The 27B workstation tier sits at the 24 GB cap. (5) The AI briefing pack's 'list of primary sources' is a starter bibliography, which ISEF forbids. (6) It is less playful than Lab Sleuth (wow-product).
+      ## fatal_flaws
+  - winner: Lab Detective (lead-concept)
+  ## grafts
+    * From Lab Sleuth (wow-product): the suspect board, where each card shows a friendly name, the physics name, the data signature it predicts and a live posterior bar. Add ghost best-fit curves over the student's points, show each suspect's predicted value BEFORE the student measures, and let the student type an optional prediction first (predict-observe-explain).
+    * From Lab Sleuth (wow-product): a fix-and-verify loop. Give a quantitative fix (e.g. raise the far end about 1.1 cm) with a predicted re-run result that either confirms the culprit or reopens the case. This makes the curriculum's 'propose ways to reduce errors' testable.
+    * From Lab Sleuth (wow-product): a sabotage practice mode, where the software plants a hidden fault in a virtual run and students hunt it with the fewest measurements, plus the 12 paper sabotage cards for the booth Judge Challenge (offline, no QR codes).
+    * From Lab Sleuth (wow-product): the deliberately misspecified hi-fi simulator (pulley inertia and friction, rolling resistance, drag, string mass, ex-Gaussian timing, digit slips) as the sim-to-real stress world. Also add the 'too-perfect data' suspect (scatter below instrument noise, e.g. v computed from sqrt(2gh)), worded without accusation.
+    * From Lab Sleuth (wow-product): in every real run, measure both the EIG-chosen follow-up and a plain repeat, in random order, so the real-data EIG-versus-repeat test is paired. Also measure how far the school spring scales' zero shifts between vertical and horizontal use, which has no literature value.
+    * From Lab Sleuth (wow-product): the student hand-codes one fault model (Hooke ruler-zero offset) and checks it against the engine, as independence evidence for the interview. Add a teacher 'assessment mode' that shows the evidence but hides the verdict.
+    * From LabSleuth (model-depth): a shuffled-label LoRA negative control (cause labels permuted within each experiment); a classical-ML probe (gradient-boosted trees on the same signature features) to answer 'is a language model needed at all?'; and the no-feature ablation run on the trained arms as well as the base models.
+    * From LabSleuth (model-depth): TOST equivalence margins for what the upgrade must not change (photo recognition and a fixed general-physics set), a leakage checker that must catch a planted duplicate, and one pre-specified checkpoint per arm, with eval-set hashes appended to the signed plan before training.
+    * From CounterLab (open-set-vision), for the P1 recognition path: matched-artifact controls for the minimal pairs (the same mask and fill applied to background); source-grouped conformal calibration with plain-language UI wording and no 'guaranteed'; a teacher recalibration page using about 30 labelled photos; 'What will you measure?' as the clarifying question for the cart+track tie; and a blind re-label of 20% of the photos a day later for intra-rater kappa.
+    * From CounterLab (open-set-vision) and Lab Sleuth (wow-product): screen every image with the existing COCO person detector. Use the 25-photo set only if the student took the photos himself and they contain no classmates' data, or if they are certified de-identified. Check the provenance of the 3 source videos before any frame appears on the board.
+    * Fixes inside Lab Detective: replace H7's row shuffle with a permutation of the measured column (or a table swapped in from another case); seed the S2 rejection sampling from S1 (expert iteration), or pre-register that the primary arm is chosen on validation data; write 'Bayes-optimal under our simulator's assumptions' instead of 'exact'; and in IRB and consent documents call the feature 'error-source analysis', not 'diagnosis'.
+  ## must_cut
+    * The 'list of primary sources to locate and read' in the AI-made briefing pack (Lab Detective). AI must not supply a starter bibliography; the student runs his own literature search and verifies every source.
+    * The live workstation tier that runs the 27B alongside Streamlit, YOLO and a browser at an estimated 20-23.5 GB. Keep the 27B only as an overnight baseline loaded alone, and ship the product on the 4B (9B optional).
+    * H7 'shuffled rows' as written: row order carries no information except drift, so it cannot test whether the decisions use the data.
+    * Any classroom session run by the student; any data or observations from the lessons from 11-07 on; and any design change made from watching classmates use the app. Also no teacher ratings, and no 'anonymous cause-count export' feature (from LabSleuth (model-depth)).
+    * The 24-family breadth (optics, electricity and thermal families) from the 11-14 path. Stay in mechanics, where the student can verify and defend every fault model.
+    * CounterLab's custom CET trainer from the 11-14 path, and any 'guaranteed 90%' or 'calibrated on photos like yours' wording on screens that students see.
+    * GRPO on the 9B as a P0 item, and the fault-parameterised 'experiment you actually ran' animation. GRPO stays P1 on the 4B, and the ghost overlays carry the same message.
+    * All P2 items from the 11-14 path (vision-side counterfactual LoRA, the sympy law compiler, 27B QLoRA, video, hidden-state probes). They stay in the plan only as later phases.
+    * Presenting the earlier five classroom sessions or the 24/25-photo result as ISEF results. Showing free-generated AI text to anyone other than the student researcher during the ISEF window. The AI launching formal runs or running the analysis in place of the student.
