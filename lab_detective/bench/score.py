@@ -8,13 +8,13 @@
   gold_agree      排第一的原因 = 引擎的第一名（K1 / 引擎参照用）
   log_score       −ln p(真实原因)（概率按 ranked 归一化，缺的记 0，下限 1e-6）
   brier           多类 Brier：Σ(p − y)²
-  ece             置信度 = 第一名的概率，正确 = eq_top1
+  ece             置信度 = 第一名的概率，正确 = top1；ece_eq：置信度 = 第一名所在等价类的概率和，正确 = eq_top1
   nil_auroc       "不在清单里"判别的 AUROC（正类 = 真实原因不在清单里；打分 = not_in_list + 0.5·(1 − 第一名概率)）
   eig_regret      (最大 EIG − 所选测量的 EIG) / 最大 EIG；最大 EIG < eig.NO_SEPARATION_BITS、或引擎与模型都写 null
                   时记 0；写 null 而引擎有推荐、或编号不存在记 1
   verifier_pass   explanation 通过 tutor/verifier.verify（对照引擎事实单）
 设计（schema = design）：json_valid、点数一致、主要来源类型一致、分不开原因对的 F1。
-K3（swapped_table）：真实 id 空间里的准确率与两个边际分布乘积的机会水平。
+K3（swapped_table）：真实 id 空间里的准确率与机会水平（按实验分层的两个边际分布乘积，同时给出不分层的值）。
 配对比较（bench/stats.py）：eq_top1 与 top1 的精确 McNemar、跨实验符号检验、按实验成簇的配对 bootstrap。
 """
 
@@ -118,7 +118,9 @@ def score_diagnose(gold: dict, text) -> dict:
     truth = gold.get("truth_disp")
     eq = set(gold.get("eq_class") or [])
     conf = probs.get(top, 0.0) if top else 0.0
-    row.update(top=top, top_real=gold["id_map"].get(top) if top else None, conf=conf)
+    top_class = next((g for g in gold.get("eq_classes") or [] if top in g), [top] if top else [])
+    row.update(top=top, top_real=gold["id_map"].get(top) if top else None, conf=conf,
+               conf_eq=sum(probs.get(c, 0.0) for c in top_class))
     if not gold["out_of_list"]:
         p_true = probs.get(truth, 0.0)
         row.update(top1=top == truth, eq_top1=top in eq, log_score=-math.log(max(p_true, EPS)),
@@ -215,7 +217,8 @@ def summarize(rows: list[dict]) -> dict:
     if inl:
         out["top1_ci95"] = list(stats.wilson(sum(bool(r["top1"]) for r in inl), len(inl)))
         out["eq_top1_ci95"] = list(stats.wilson(sum(bool(r["eq_top1"]) for r in inl), len(inl)))
-        out["ece"] = stats.ece([r["conf"] for r in inl], [bool(r["eq_top1"]) for r in inl])["ece"]
+        out["ece"] = stats.ece([r["conf"] for r in inl], [bool(r["top1"]) for r in inl])["ece"]
+        out["ece_eq"] = stats.ece([r["conf_eq"] for r in inl], [bool(r["eq_top1"]) for r in inl])["ece"]
     out["nil_auroc"] = nil_auroc(rows)
     return out
 
@@ -238,7 +241,14 @@ def k3_chance(rows: list[dict], gold: dict[str, dict]) -> dict:
     truth = [gold[r["id"]]["truth_cause"] for r in rs]
     pred = [r["top_real"] or "(无)" for r in rs]
     acc = float(np.mean([t == p for t, p in zip(truth, pred)]))
-    return {"n": len(rs), "acc_real": acc, "chance": stats.chance_product_of_marginals(truth, pred),
+    # 换表只在同一实验内换，机会水平按实验分层：每个实验内两个边际分布的乘积，再按样本数加权
+    fam: dict[str, list[int]] = defaultdict(list)
+    for i, r in enumerate(rs):
+        fam[r["family"]].append(i)
+    chance = sum(len(ix) / len(rs) * stats.chance_product_of_marginals([truth[i] for i in ix], [pred[i] for i in ix])
+                 for ix in fam.values())
+    return {"n": len(rs), "acc_real": acc, "chance": float(chance),
+            "chance_pooled": stats.chance_product_of_marginals(truth, pred),
             "acc_ci95": list(stats.wilson(sum(t == p for t, p in zip(truth, pred)), len(rs)))}
 
 
@@ -310,20 +320,23 @@ def _f(v, d=3) -> str:
 
 def to_markdown(rep: dict, cmp: dict | None = None, name_b: str = "") -> str:
     lines = [f"# 物理 bench 报告：{rep.get('model') or '(未命名)'}", ""]
-    lines += ["| 划分 | n | JSON 合法 | top-1 | 等价类 top-1 | 引擎一致 | log score | Brier | ECE | EIG 后悔 | 校验通过 | 不在清单 AUROC |",
-              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    lines += ["| 划分 | n | JSON 合法 | top-1 | 等价类 top-1 | 引擎一致 | log score | Brier | ECE | ECE(等价类) | EIG 后悔 | 校验通过 | 不在清单 AUROC |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for s, d in rep["splits"].items():
         a = d["all"]
         lines.append(f"| {s} | {a['n']} | {_f(a.get('json_valid'))} | {_f(a.get('top1'))} | {_f(a.get('eq_top1'))} | "
-                     f"{_f(a.get('gold_agree'))} | {_f(a.get('log_score'))} | {_f(a.get('brier'))} | {_f(a.get('ece'))} | "
+                     f"{_f(a.get('gold_agree'))} | {_f(a.get('log_score'))} | {_f(a.get('brier'))} | {_f(a.get('ece'))} | {_f(a.get('ece_eq'))} | "
                      f"{_f(a.get('eig_regret'))} | {_f(a.get('verifier_pass'))} | {_f(a.get('nil_auroc'))} |")
         if s == "design":
             lines.append(f"|  ↳ 设计 | | 点数 {_f(a.get('n_points_ok'))} | 来源 {_f(a.get('source_type_ok'))} | "
-                         f"分不开对 F1 {_f(a.get('unresolved_f1'))} | | | | | | | |")
+                         f"分不开对 F1 {_f(a.get('unresolved_f1'))} | | | | | | | | |")
     o = rep.get("overall_diagnose") or {}
     if o:
         lines += ["", f"诊断合计（不含 K1/K3）：n = {o['n']}，等价类 top-1 = {_f(o.get('eq_top1'))}，"
                       f"不在清单 AUROC = {_f(o.get('nil_auroc'))}"]
+    for s, d in rep["splits"].items():
+        for k, v in (d.get("by_subsplit") or {}).items():
+            lines.append(f"{s} / {k}：n = {v['n']}，判为不在清单的比例 {_f(v.get('nil_rate'))}")
     k3 = rep.get("k3_swapped_table") or {}
     if k3:
         lines.append(f"K3 换表对照：准确率 {_f(k3['acc_real'])}（95% 区间 {_f(k3['acc_ci95'][0])}–{_f(k3['acc_ci95'][1])}），"
