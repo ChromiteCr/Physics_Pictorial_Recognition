@@ -9,6 +9,7 @@ import pytest
 from lab_detective.bench import physics_bench as pb
 from lab_detective.bench import run_models, score
 from lab_detective.training import prompts
+from lab_detective.training import tasks_design as tdz
 from lab_detective.training import tasks_diagnose as td
 from lab_detective.training.format import read_jsonl
 from lab_detective.training.splits import example_rng, example_seed
@@ -35,6 +36,12 @@ def test_target_matches_training_generator():
     best = max(r["eig"], key=r["eig"].get)
     if r["target"]["next_measurement"]:
         assert r["target"]["next_measurement"]["id"] == best  # 同一个种子，EIG 与事实单完全一致
+
+
+def test_design_matches_training_generator():
+    ex = tdz.build_example(0, "train")
+    mine, _, _ = pb._design_one(0, 0, example_rng("design", "train", 0))
+    assert mine.messages == ex.messages
 
 
 def test_seed_namespace_disjoint():

@@ -220,10 +220,13 @@ def summarize(rows: list[dict]) -> dict:
         out["ece"] = stats.ece([r["conf"] for r in inl], [bool(r["top1"]) for r in inl])["ece"]
         out["ece_eq"] = stats.ece([r["conf_eq"] for r in inl], [bool(r["eq_top1"]) for r in inl])["ece"]
     out["nil_auroc"] = nil_auroc(rows)
+    out["nil_auroc_detectable"] = nil_auroc([r for r in rows if r.get("subsplit") != "degenerate"])
     return out
 
 
 def nil_auroc(rows: list[dict]) -> float | None:
+    """正类 = 真实原因不在清单里。nil_auroc_detectable 去掉"退化"样本（引擎失配判据也看不出来的，任何模型都抓不到）；
+    可检测 / 退化的划分来自引擎自己的失配判据，所以引擎在可检测子集上的 AUROC≈1 是构造使然，不是引擎有效的证据。"""
     rows = [r for r in rows if "nil_score" in r]
     y = [r["out_of_list"] for r in rows]
     if not rows or all(y) or not any(y):
@@ -333,7 +336,7 @@ def to_markdown(rep: dict, cmp: dict | None = None, name_b: str = "") -> str:
     o = rep.get("overall_diagnose") or {}
     if o:
         lines += ["", f"诊断合计（不含 K1/K3）：n = {o['n']}，等价类 top-1 = {_f(o.get('eq_top1'))}，"
-                      f"不在清单 AUROC = {_f(o.get('nil_auroc'))}"]
+                      f"不在清单 AUROC = {_f(o.get('nil_auroc'))}（只算可检测的：{_f(o.get('nil_auroc_detectable'))}）"]
     for s, d in rep["splits"].items():
         for k, v in (d.get("by_subsplit") or {}).items():
             lines.append(f"{s} / {k}：n = {v['n']}，判为不在清单的比例 {_f(v.get('nil_rate'))}")
