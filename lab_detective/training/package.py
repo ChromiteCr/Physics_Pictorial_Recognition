@@ -25,8 +25,10 @@ REPO = Path(__file__).resolve().parents[2]
 UPLOAD_KBPS = 100.0
 
 
-def _merge_jsonl(files: list[Path], dst: Path, counts: Counter, split: str, images: set[str],
-                 warnings: list[str]) -> int:
+def _merge_jsonl(files: list[Path], dst: Path, counts: Counter, split: str, images: dict[str, Path],
+                 warnings: list[str], images_root: Path, local_first: bool = False) -> int:
+    """images: 包内相对路径 → 源文件。local_first=True（bench）时先找 bench 文件旁边的 images/（识别 bench 的带框图），
+    找不到再按 images_root 解析。同一路径指向两个内容不同的源文件时报错。"""
     dst.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with dst.open("w", encoding="utf-8") as fo:
@@ -36,7 +38,13 @@ def _merge_jsonl(files: list[Path], dst: Path, counts: Counter, split: str, imag
                 if ex.task == "diagnose" and "causes" not in ex.meta and len(warnings) < 5:
                     warnings.append(f"{ex.id}: diagnose 样本缺 meta.causes（服务器打乱标签对照要用）")
                 counts[(split, ex.task, ex.source)] += 1
-                images.update(ex.images())
+                for rel in ex.images():
+                    src = f.parent / rel if local_first and (f.parent / rel).exists() else images_root / rel
+                    prev = images.get(rel)
+                    if prev is not None and prev != src and prev.exists() and src.exists() \
+                            and sha256_file(prev) != sha256_file(src):
+                        raise ValueError(f"图片路径冲突：{rel} 同时指向 {prev} 和 {src}（内容不同）")
+                    images.setdefault(rel, src)
                 fo.write(json.dumps(ex.to_dict(), ensure_ascii=False) + "\n")
                 n += 1
     return n
@@ -45,24 +53,24 @@ def _merge_jsonl(files: list[Path], dst: Path, counts: Counter, split: str, imag
 def build_package(train: list[Path], val: list[Path], bench_files: list[Path], images_root: Path,
                   out_root: Path, tag: str | None = None) -> dict:
     """布局与 server/README.md 一致：<pkg>/train.jsonl、val.jsonl、bench/bench_*.jsonl、images/、server/。
-    样本里的图片路径（images/...）相对 images_root，打包后相对数据包根目录。"""
+    样本里的图片路径（images/...）相对 images_root（bench 先找 bench 文件旁边），打包后相对数据包根目录。"""
     tag = tag or _dt.date.today().strftime("%Y%m%d")
     pkg = out_root / f"package_{tag}"
     if pkg.exists():
         shutil.rmtree(pkg)
     pkg.mkdir(parents=True)
     counts: Counter = Counter()
-    images: set[str] = set()
+    images: dict[str, Path] = {}
     warnings: list[str] = []
-    _merge_jsonl(train, pkg / "train.jsonl", counts, "train", images, warnings)
+    _merge_jsonl(train, pkg / "train.jsonl", counts, "train", images, warnings, images_root)
     if val:
-        _merge_jsonl(val, pkg / "val.jsonl", counts, "val", images, warnings)
+        _merge_jsonl(val, pkg / "val.jsonl", counts, "val", images, warnings, images_root)
     for bf in bench_files:
         name = bf.name if bf.name.startswith("bench_") else f"bench_{bf.parent.name}_{bf.name}"
-        _merge_jsonl([bf], pkg / "bench" / name, counts, "bench", images, warnings)
+        _merge_jsonl([bf], pkg / "bench" / name, counts, "bench", images, warnings, images_root, local_first=True)
     missing = []
     for rel in sorted(images):
-        src = images_root / rel
+        src = images[rel]
         if not src.exists():
             missing.append(rel)
             continue
