@@ -320,8 +320,9 @@ def length_table(tok_stats, eval_max_new_tokens: int = EVAL_MAX_NEW_TOKENS) -> s
     q = (lambda d: "/".join(str(d.get(k, "-")) for k in ("p50", "p90", "p99", "max")))
     rows = [f"max_len={tok_stats['max_len']}  保留 {tok_stats['n_kept']}  "
             f"答案会被截掉（整条丢弃）{tok_stats['n_dropped_too_long']}",
-            f"{'task':<10}{'n':>6}{'答案被截':>6}{'prompt超长':>8}  "
-            f"{'prompt p50/p90/p99/max':<26}{'答案 p50/p90/p99/max':<24}总长 p50/p90/p99/max"]
+            # 中文占两格：表头手工对齐数据列（task 10、n 6、答案被截 10、prompt超长 12）
+            "task           n  答案被截  prompt超长  prompt p50/p90/p99/max      答案 p50/p90/p99/max      "
+            "总长 p50/p90/p99/max"]
     long_targets = []
     for task, s in tok_stats["by_task"].items():
         rows.append(f"{task:<10}{s['n']:>6}{s['n_over_max_len']:>10}{s.get('n_prompt_over_max_len', 0):>12}  "
