@@ -39,15 +39,9 @@ IGNORED_BASE_KEYS = re.compile(r"^mtp\.")  # 底座检查点里的多 token 预�
 
 # ---------------------------------------------------------------- merge
 
-def _load_hf(model_dir, device):
-    import torch
-    from transformers import AutoModelForImageTextToText
-
-    kw = dict(device_map={"": device})
-    try:
-        return AutoModelForImageTextToText.from_pretrained(model_dir, dtype=torch.bfloat16, **kw)
-    except TypeError:
-        return AutoModelForImageTextToText.from_pretrained(model_dir, torch_dtype=torch.bfloat16, **kw)
+def _load_hf(model_dir, device, need_vision: bool = True):
+    # 图文模型类优先；不认识配置时退回纯文本类（有图片的 bench 不许退回；合并时退回会丢视觉塔，键检查会拦住）
+    return C.load_base_model(model_dir, device_map={"": device}, need_vision=need_vision)
 
 
 def merge(base: str, adapter: str, out: str, device: str = "cuda:0") -> dict:
@@ -179,7 +173,7 @@ def run_hf(items, args, write):
     processor = AutoProcessor.from_pretrained(args.model)
     tok = processor.tokenizer
     tok.padding_side = "left"  # 批量生成必须左填充
-    model = _load_hf(args.model, "cuda:0")
+    model = _load_hf(args.model, "cuda:0", need_vision=any(it["images"] for it in items))
     if args.adapter:
         from peft import PeftModel
 
@@ -287,6 +281,15 @@ def _versions() -> dict:
     return out
 
 
+def default_data_root(bench_file: str | Path) -> str:
+    """数据包布局是 <包>/bench/bench_*.jsonl + <包>/images/：bench 目录旁边没有 images/、上一级有时取上一级；
+    冒烟数据（bench.jsonl 和 images/ 同目录）取 bench 文件所在目录。"""
+    d = Path(bench_file).resolve().parent
+    if not (d / "images").is_dir() and (d.parent / "images").is_dir():
+        return str(d.parent)
+    return str(d)
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="合并适配器 / bench 贪心生成")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -300,16 +303,17 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--adapter", default=None, help="只用于 --backend hf：不合并直接挂适配器")
     e.add_argument("--backend", choices=("vllm", "hf"), default="vllm")
     e.add_argument("--bench", nargs="+", required=True)
-    e.add_argument("--data-root", default=None, help="bench 图片根目录（默认第一个 bench 文件所在目录）")
+    e.add_argument("--data-root", default=None,
+                   help="图片根目录（图片路径相对它）；默认按数据包布局推断：bench 文件在 <包>/bench/ 下时取 <包>")
     e.add_argument("--out", required=True)
     e.add_argument("--arm", required=True, help="对比组名，如 S1 / shuffled / base0 / base3shot")
     e.add_argument("--shots", type=int, default=0)
     e.add_argument("--shots-from", nargs="*", default=[])
     e.add_argument("--seed", type=int, default=0)
     e.add_argument("--max-new-tokens", type=int, default=1536,
-                   help="诊断 JSON 约 700 字 ≈ 400–600 token；留足余量，截断的回复 JSON 不合法")
+                   help="诊断 JSON 约 700 字 ≈ 500–1,000 token；留足余量（≥ 1024），截断的回复 JSON 不合法")
     e.add_argument("--max-model-len", type=int, default=16384,
-                   help="vLLM 上下文长度：诊断提示约 2,000–2,500 token，3-shot 再加 3 个示例约 1 万")
+                   help="vLLM 上下文长度：诊断样本约 2,200–3,000 token，3-shot 再加 3 个示例约 1.2 万")
     e.add_argument("--gpu-mem-util", type=float, default=0.85)
     e.add_argument("--batch-size", type=int, default=16, help="hf 后端的批大小")
     e.add_argument("--chunk", type=int, default=512, help="vllm 每次提交的条数（也是断点粒度）")
@@ -325,7 +329,9 @@ def main(argv=None):
         return 0
     if a.adapter and a.backend == "vllm":
         raise SystemExit("vllm 后端请先 merge，再用 --model 指向合并后的目录")
-    a.data_root = a.data_root or str(Path(a.bench[0]).resolve().parent)
+    a.data_root = a.data_root or default_data_root(a.bench[0])
+    if a.max_new_tokens < 1024:
+        print(f"警告：--max-new-tokens {a.max_new_tokens} < 1024，诊断答案可能被截断", file=sys.stderr)
     evaluate(a)
     return 0
 

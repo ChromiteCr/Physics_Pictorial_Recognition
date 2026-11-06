@@ -388,11 +388,13 @@ def test_encode_all_reports_over_length_per_task(tmp_path):
     assert st["by_task"]["diagnose"]["total"]["max"] == n0
     assert st["by_task"]["diagnose"]["target"]["p50"] > 0
     table = T.length_table(st)
-    assert "diagnose" in table and "超长丢弃 3" in table
+    assert "diagnose" in table and "答案会被截掉（整条丢弃）3" in table and "p50/p90/p99/max" in table
+    assert st["by_task"]["diagnose"]["n_prompt_over_max_len"] == 0  # prompt 本身没超，只是答案放不下
 
 
 def test_defaults_fit_long_diagnose_samples(tmp_path):
-    """诊断样本约 2,000–2,500 token：默认 max_len 4096、微批次 1 × 累积 16；生成长度和上下文留足。"""
+    """诊断样本约 2,200–3,000 token：默认 max_len 4096、微批次 1 × 累积 16；生成长度和上下文留足；
+    LoRA 默认覆盖语言模型全部线性层（含线性注意力投影）。"""
     import merge_and_eval as M
     import train_sft as T
 
@@ -401,6 +403,9 @@ def test_defaults_fit_long_diagnose_samples(tmp_path):
     assert T.parse_args(["--model", "m", "--train", "t", "--output", "o", "--allow-truncation"]).allow_truncation
     e = M.build_parser().parse_args(["eval", "--model", "m", "--bench", "b.jsonl", "--out", "o", "--arm", "x"])
     assert e.max_new_tokens >= 1024 and e.max_model_len >= 12288
+    assert e.max_new_tokens == T.EVAL_MAX_NEW_TOKENS
+    assert T.resolve_targets(a.targets) == T.ATTN_MLP + T.LINEAR_ATTN
+    assert T.resolve_targets("attn-mlp") == T.ATTN_MLP
 
 
 def test_shuffle_top_changed_counts_name_only_targets():
@@ -584,3 +589,105 @@ def test_fast_path_selftest_logic_with_fake_kernels(monkeypatch):
     assert T.fast_path_selftest("causal_conv1d", device="cpu")["ok"] is True
     monkeypatch.setitem(sys.modules, "causal_conv1d", None)  # 没装
     assert T.fast_path_selftest("causal_conv1d", device="cpu")["ok"] is None
+
+
+# ---------------------------------------------------------------- 截断闸门与 main()（假分词器）
+
+def _stats_with(tmp_path, max_len_delta=-1):
+    import train_sft as T
+
+    recs = [diag(f"d-{i}") for i in range(3)] + [rec("k-1", task="knowledge", target="短")]
+    a = _args(tmp_path)
+    n0 = len(C.encode_example(recs[0], CODEC, load_image=lambda p: p)["input_ids"])
+    a.max_len = n0 + max_len_delta
+    return T.encode_all(recs, {r["id"]: r for r in recs}, CODEC, a, lambda *x, **k: None)[1]
+
+
+def test_truncation_gate(tmp_path):
+    import train_sft as T
+
+    st = _stats_with(tmp_path, -1)
+    refuse, msg = T.truncation_gate(st, allow_truncation=False)
+    assert refuse and "3 条" in msg and "diagnose" in msg
+    refuse, msg = T.truncation_gate(st, allow_truncation=True)
+    assert not refuse and "--allow-truncation" in msg
+    ok = _stats_with(tmp_path, 0)  # 恰好放得下：不拒绝
+    assert T.truncation_gate(ok, allow_truncation=False)[0] is False
+    # 答案比评测的 max_new_tokens 还长：表里给警告
+    st2 = dict(ok, by_task={k: dict(v, target=dict(v["target"], max=T.EVAL_MAX_NEW_TOKENS + 1))
+                            for k, v in ok["by_task"].items()})
+    assert "max-new-tokens" in T.length_table(st2)
+
+
+@pytest.fixture
+def fake_server(tmp_path, monkeypatch):
+    """main() 用假分词器跑：不需要 Qwen 分词器、不碰 GPU。"""
+    import train_sft as T
+
+    monkeypatch.setattr(T, "load_codec", lambda model: (CODEC, 0))
+    model = tmp_path / "model"
+    model.mkdir()
+    keys = {f"model.language_model.layers.{i}.mlp.{s}.weight": {"dtype": "BF16", "shape": [8, 8], "data_offsets": [0, 0]}
+            for i in range(2) for s in ("gate_proj", "up_proj", "down_proj")}
+    keys["model.language_model.layers.0.linear_attn.in_proj_qkv.weight"] = keys[next(iter(keys))]
+    hdr = json.dumps(keys).encode()
+    (model / "model.safetensors").write_bytes(len(hdr).to_bytes(8, "little") + hdr)
+    recs = [diag(f"d-{i}") for i in range(3)] + [rec("k-1", task="knowledge", target="短")]
+    C.write_jsonl(tmp_path / "train.jsonl", recs)
+    n0 = len(C.encode_example(recs[0], CODEC, load_image=lambda p: p)["input_ids"])
+    base = ["--model", str(model), "--train", str(tmp_path / "train.jsonl"), "--no-leak-check"]
+    return T, base, n0, tmp_path
+
+
+def test_main_dry_run_reports_and_real_run_refuses(fake_server, capsys):
+    T, base, n0, tmp = fake_server
+    assert T.main(base + ["--output", str(tmp / "dry"), "--dry-run", "--max-len", str(n0 - 1)]) == 0
+    out = capsys.readouterr().out
+    assert "p50/p90/p99/max" in out and "不能开训" in out
+    rep = json.loads((tmp / "dry" / "dryrun.json").read_text(encoding="utf-8"))
+    assert rep["would_refuse_training"] is True and rep["tokens"]["n_dropped_too_long"] == 3
+    assert rep["n_lora_modules"] == 7  # 2 层 × MLP 3 个 + 1 个线性注意力投影（默认 all-linear）
+    # 正式训练：在导入 torch / 加载模型之前就拒绝
+    with pytest.raises(SystemExit, match="拒绝开训"):
+        T.main(base + ["--output", str(tmp / "real"), "--max-len", str(n0 - 1)])
+    # 放得下：dry-run 结论是可以开训
+    assert T.main(base + ["--output", str(tmp / "dry2"), "--dry-run", "--max-len", str(n0)]) == 0
+    rep2 = json.loads((tmp / "dry2" / "dryrun.json").read_text(encoding="utf-8"))
+    assert rep2["would_refuse_training"] is False and rep2["tokens"]["n_dropped_too_long"] == 0
+
+
+def test_main_allow_truncation_passes_gate(fake_server, monkeypatch):
+    T, base, n0, tmp = fake_server
+    torch = pytest.importorskip("torch")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    # 过了截断闸门，停在下一道检查（没有 GPU）
+    with pytest.raises(SystemExit, match="没有 GPU"):
+        T.main(base + ["--output", str(tmp / "real"), "--max-len", str(n0 - 1), "--allow-truncation"])
+
+
+def test_load_base_model_classes_and_fallback(tmp_path, monkeypatch):
+    """图文类能加载就用图文类；不认识配置时退回纯文本类；数据里有图片时不许退回。"""
+    model, torch = _tiny_qwen35()
+    import transformers as tf
+
+    model.save_pretrained(tmp_path / "tiny")
+    m = C.load_base_model(str(tmp_path / "tiny"), device_map=False, need_vision=True)
+    assert next(m.parameters()).dtype == torch.bfloat16 and hasattr(m.model, "visual")
+
+    def boom(*a, **k):
+        raise ValueError("Unrecognized configuration class")
+
+    monkeypatch.setattr(tf.AutoModelForImageTextToText, "from_pretrained", boom)
+    with pytest.raises(SystemExit, match="不能退回纯文本模型"):
+        C.load_base_model(str(tmp_path / "tiny"), device_map=False, need_vision=True)
+
+
+def test_eval_default_data_root_follows_package_layout(tmp_path):
+    import merge_and_eval as M
+
+    pkg = tmp_path / "pkg"
+    (pkg / "bench").mkdir(parents=True)
+    (pkg / "images").mkdir()
+    assert M.default_data_root(pkg / "bench" / "bench_x.jsonl") == str(pkg.resolve())
+    (tmp_path / "smoke" / "images").mkdir(parents=True)  # 冒烟：bench.jsonl 和 images/ 同目录
+    assert M.default_data_root(tmp_path / "smoke" / "bench.jsonl") == str((tmp_path / "smoke").resolve())

@@ -1,13 +1,19 @@
 """LoRA SFT（RTX 5090）：Qwen3.5-4B 的语言部分，引擎标签监督。
 
-- LoRA r=16、α=32、dropout 0.05，只挂在语言模型的线性层上（默认注意力 q/k/v/o + MLP gate/up/down；
-  线性注意力 linear_attn 的投影要先在 Mac 上用 convert_adapter.py check-names 确认 MLX 同名后再用 --targets 加）。
-  视觉塔、词嵌入、lm_head 全部冻结。
+- LoRA r=16、α=32、dropout 0.05，只挂在语言模型的线性层上。默认 all-linear = 全注意力层 q/k/v/o + MLP gate/up/down
+  + 线性注意力（Gated DeltaNet）投影 in_proj_qkv/in_proj_z/in_proj_b/in_proj_a/out_proj：Qwen3.5 大部分层是线性注意力，
+  只挂 q/k/v/o 的话这些层只有 MLP 被微调。开训前在 Mac 上用 convert_adapter.py check-names 核对 MLX 同名；
+  不通过就 S1 和对照都用 --targets attn-mlp（只有注意力 + MLP）。视觉塔、词嵌入、lm_head 全部冻结。
 - bf16、梯度检查点（use_reentrant=False）、只对最后一条助手回复算损失（见 common.py 文件头）。
 - 损失按 token 加权：一个优化步里所有微批次的目标 token 求和后再除以总数（所以微批次怎么切不影响目标函数）。
 - 只算目标位置的 logits（logits_to_keep）：词表 248k，4096 长度整段 logits 要 4 GB，前向 + 反向翻倍。
-- 默认 max_len 4096、微批次 1 × 累积 16：诊断样本约 2,000–2,500 token；超长样本不截断而是丢弃，
-  正式训练时只要有一条超长就拒绝开训（--allow-truncation 才放行），dry-run 报告各 task 的长度分位数和超长数。
+- 默认 max_len 4096、微批次 1 × 累积 16：诊断样本约 2,200–3,000 token；超长样本不截断而是丢弃，
+  正式训练时只要有一条超长（答案会被截掉）就拒绝开训（--allow-truncation 才放行），
+  dry-run 打印各 task 的 prompt / 答案 / 总长分位数（p50/p90/p99/max）和答案会被截掉的条数。
+- 显存估算（4B、bf16、LoRA、梯度检查点、max_len 4096、微批次 1）：权重约 9–10 GB（含视觉塔）；LoRA + AdamW 状态 < 1 GB；
+  检查点激活约 层数 × L × hidden × 2 字节 ≈ 0.7 GB，加重算的一层约 1–2 GB；只算答案位置的 logits
+  （约 1k × 词表 248k，bf16 + fp32 交叉熵副本 + 梯度）约 2–3 GB；合计约 15–20 GB，32 GB 卡余量充足。
+  没有 fla 快速路径时 torch 版 gated-delta 更费显存，以吞吐探针日志里的 gpu_mem_gb 为准。
 - 数据顺序只由 (seed, epoch, id) 决定；--shuffle-labels 的打乱标签对照看到完全相同的批次。
 - 学习率调度由"计划总步数"决定；对照用 --match-steps-from <S1 输出目录> 读回 S1 的计划总步数和最终步数，
   两边学习率轨迹逐步相同。--max-minutes 只是安全闸。
@@ -37,6 +43,7 @@ import common as C  # noqa: E402
 from convert_adapter import ATTN_MLP, LANG_PREFIXES, expected_lora_modules, hf_module_to_mlx  # noqa: E402
 
 LINEAR_ATTN = ("in_proj_qkv", "in_proj_z", "in_proj_b", "in_proj_a", "out_proj")
+EVAL_MAX_NEW_TOKENS = 1536  # 与 merge_and_eval.py 的默认值一致：答案比它长，评测时也会被截断
 # 对照必须和 S1 一致的配置项
 MATCH_KEYS = ("model", "seed", "lr", "batch_size", "grad_accum", "epochs", "max_len", "lora_r", "lora_alpha",
               "lora_dropout", "targets", "warmup_ratio", "min_lr_ratio", "weight_decay", "max_grad_norm", "tasks")
@@ -70,8 +77,9 @@ def parse_args(argv=None):
     ap.add_argument("--lora-r", type=int, default=16)
     ap.add_argument("--lora-alpha", type=float, default=32)
     ap.add_argument("--lora-dropout", type=float, default=0.05)
-    ap.add_argument("--targets", default=",".join(ATTN_MLP),
-                    help="LoRA 模块名后缀，逗号分隔；'all-linear' = 注意力 + MLP + 线性注意力投影")
+    ap.add_argument("--targets", default="all-linear",
+                    help="LoRA 模块名后缀，逗号分隔；'all-linear'（默认）= 注意力 + MLP + 线性注意力投影；"
+                         "'attn-mlp' = 只有注意力 q/k/v/o + MLP（Mac 上 check-names 不通过时用）")
     # 对照与匹配
     ap.add_argument("--shuffle-labels", action="store_true", help="打乱标签对照：每个诊断样本独立置换原因标签")
     ap.add_argument("--shuffle-tasks", default="diagnose")
@@ -116,7 +124,9 @@ class JsonlLog:
 def resolve_targets(spec: str) -> tuple[str, ...]:
     if spec == "all-linear":
         return ATTN_MLP + LINEAR_ATTN
-    return tuple(s for s in spec.split(",") if s)
+    if spec == "attn-mlp":
+        return ATTN_MLP
+    return tuple(s.strip() for s in spec.split(",") if s.strip())
 
 
 def ids_digest(ids) -> str:
@@ -271,12 +281,14 @@ def encode_all(recs, originals, codec, args, log):
             n_decide = enc["n_prompt"] + len(codec.tokenize(ot + codec.end_marker, [])["input_ids"])
         if i < 20 and not C.check_full_render(rec, codec):
             n_render_mismatch += 1
-        bt = by_task.setdefault(rec["task"], {"total": [], "prompt": [], "target": [], "over": []})
+        bt = by_task.setdefault(rec["task"], {"total": [], "prompt": [], "target": [], "over": [], "prompt_over": []})
         bt["total"].append(n_decide)
         bt["prompt"].append(enc["n_prompt"])
         bt["target"].append(n_decide - enc["n_prompt"])
         if n_decide > args.max_len:
             bt["over"].append(rec["id"])
+            if enc["n_prompt"] >= args.max_len:  # 连 prompt 都放不下：答案一个 token 都留不住
+                bt["prompt_over"].append(rec["id"])
             dropped.append(rec["id"])
             continue
         n = len(enc["input_ids"])
@@ -293,6 +305,7 @@ def encode_all(recs, originals, codec, args, log):
              "tokens_total": C.length_stats(lens), "tokens_prompt": C.length_stats(plens),
              "tokens_target": C.length_stats(tlens),
              "by_task": {k: {"n": len(v["total"]), "n_over_max_len": len(v["over"]),
+                             "n_prompt_over_max_len": len(v["prompt_over"]),
                              "total": C.length_stats(v["total"]), "prompt": C.length_stats(v["prompt"]),
                              "target": C.length_stats(v["target"])} for k, v in sorted(by_task.items())},
              "full_render_mismatch_first20": n_render_mismatch}
@@ -301,15 +314,38 @@ def encode_all(recs, originals, codec, args, log):
     return items, stats
 
 
-def length_table(tok_stats) -> str:
-    """dry-run 打印用：每个 task 的总长 / 目标长分位数和超长条数（超长 = prompt + 目标 > max_len，会被丢弃）。"""
-    rows = [f"max_len={tok_stats['max_len']}  保留 {tok_stats['n_kept']}  超长丢弃 {tok_stats['n_dropped_too_long']}",
-            f"{'task':<10}{'n':>6}{'超长':>6}  总长 p50/p90/p99/max          目标 p50/p90/p99/max"]
+def length_table(tok_stats, eval_max_new_tokens: int = EVAL_MAX_NEW_TOKENS) -> str:
+    """dry-run 打印用：每个 task 的 prompt / 答案 / 总长 token 分位数（p50/p90/p99/max，按全部样本统计，含超长的），
+    以及答案会被截掉的条数（prompt + 答案 > max_len：训练时整条丢弃，等于这条答案被截光）。"""
+    q = (lambda d: "/".join(str(d.get(k, "-")) for k in ("p50", "p90", "p99", "max")))
+    rows = [f"max_len={tok_stats['max_len']}  保留 {tok_stats['n_kept']}  "
+            f"答案会被截掉（整条丢弃）{tok_stats['n_dropped_too_long']}",
+            f"{'task':<10}{'n':>6}{'答案被截':>6}{'prompt超长':>8}  "
+            f"{'prompt p50/p90/p99/max':<26}{'答案 p50/p90/p99/max':<24}总长 p50/p90/p99/max"]
+    long_targets = []
     for task, s in tok_stats["by_task"].items():
-        t, g = s["total"], s["target"]
-        q = (lambda d: "/".join(str(d.get(k, "-")) for k in ("p50", "p90", "p99", "max")))
-        rows.append(f"{task:<10}{s['n']:>6}{s['n_over_max_len']:>6}  {q(t):<28}{q(g)}")
+        rows.append(f"{task:<10}{s['n']:>6}{s['n_over_max_len']:>10}{s.get('n_prompt_over_max_len', 0):>12}  "
+                    f"{q(s['prompt']):<28}{q(s['target']):<26}{q(s['total'])}")
+        if s["target"].get("max", 0) > eval_max_new_tokens:
+            long_targets.append(f"{task}（最长 {s['target']['max']}）")
+    if long_targets:
+        rows.append(f"警告：这些 task 的答案超过评测的 --max-new-tokens {eval_max_new_tokens}，评测时会被截断、"
+                    f"JSON 不合法：{'、'.join(long_targets)}。评测时加大 --max-new-tokens。")
     return "\n".join(rows)
+
+
+def truncation_gate(tok_stats, allow_truncation: bool) -> tuple[bool, str]:
+    """返回 (是否拒绝开训, 说明)。有任何一条答案会被截掉（prompt + 答案 > max_len）就拒绝，
+    除非 --allow-truncation（这些样本会被整条丢弃；S1 和对照要用同一设置）。"""
+    n = tok_stats["n_dropped_too_long"]
+    if n == 0:
+        return False, f"全部 {tok_stats['n_kept']} 条都在 max_len={tok_stats['max_len']} 以内，可以开训。"
+    per = {t: s["n_over_max_len"] for t, s in tok_stats["by_task"].items() if s["n_over_max_len"]}
+    msg = (f"{n} 条样本的答案会被截掉（prompt + 答案 > max_len={tok_stats['max_len']}；按 task：{per}；"
+           f"例 {tok_stats['dropped_ids'][:5]}）。")
+    if allow_truncation:
+        return False, msg + "已加 --allow-truncation：这些样本整条丢弃后开训（对照必须同样设置）。"
+    return True, msg + "正式训练会拒绝开训：加大 --max-len（如 6144），或确认后加 --allow-truncation（S1 和对照一致）。"
 
 
 def build_plan(items, args, start_step=0):
@@ -340,9 +376,24 @@ def check_match(args, cfg, kept_digest, log):
     return diffs
 
 
+def load_codec(model_path: str):
+    """处理器 → (codec, pad_id)。断言模板能关闭思考、分词器认识回合结束符。"""
+    from transformers import AutoProcessor
+
+    processor = AutoProcessor.from_pretrained(model_path)
+    if not C.template_has_thinking_switch(processor):
+        raise SystemExit("模板里没有 enable_thinking 开关：无法保证关闭思考，停止。")
+    codec = C.make_hf_codec(processor, enable_thinking=False)
+    tok = getattr(processor, "tokenizer", processor)
+    if tok.convert_tokens_to_ids(codec.end_marker) in (None, tok.unk_token_id):
+        raise SystemExit(f"分词器里没有回合结束符 {codec.end_marker}")
+    pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.convert_tokens_to_ids(codec.end_marker)
+    return codec, pad_id
+
+
 # ---------------------------------------------------------------- 模型
 
-def load_model(args, targets, log):
+def load_model(args, targets, log, need_vision: bool = True):
     import torch
 
     if args.backend == "unsloth":
@@ -356,13 +407,8 @@ def load_model(args, targets, log):
             bias="none", random_state=args.seed, target_modules=list(targets))
         return model
     from peft import LoraConfig, get_peft_model
-    from transformers import AutoModelForImageTextToText
 
-    kw = dict(device_map={"": 0}, attn_implementation=args.attn)
-    try:
-        model = AutoModelForImageTextToText.from_pretrained(args.model, dtype=torch.bfloat16, **kw)
-    except TypeError:
-        model = AutoModelForImageTextToText.from_pretrained(args.model, torch_dtype=torch.bfloat16, **kw)
+    model = C.load_base_model(args.model, attn=args.attn, need_vision=need_vision)
     model.config.use_cache = False
     if getattr(model.config, "text_config", None) is not None:
         model.config.text_config.use_cache = False
@@ -567,16 +613,7 @@ def main(argv=None):
     cfg["targets"] = list(targets)
     log("start", config=cfg, run_name=args.run_name, versions=versions(), fast_path=fast_path_info())
 
-    from transformers import AutoProcessor
-
-    processor = AutoProcessor.from_pretrained(args.model)
-    if not C.template_has_thinking_switch(processor):
-        raise SystemExit("模板里没有 enable_thinking 开关：无法保证关闭思考，停止。")
-    codec = C.make_hf_codec(processor, enable_thinking=False)
-    tok = getattr(processor, "tokenizer", processor)
-    if tok.convert_tokens_to_ids(codec.end_marker) in (None, tok.unk_token_id):
-        raise SystemExit(f"分词器里没有回合结束符 {codec.end_marker}")
-    pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.convert_tokens_to_ids(codec.end_marker)
+    codec, pad_id = load_codec(args.model)
 
     recs, originals, data_report = prepare_records(args, log)
     t0 = time.time()
@@ -587,10 +624,8 @@ def main(argv=None):
         stop_at_step=stop_at, n_micro_batches=len(micro), **{k: v for k, v in tok_stats.items() if k != "dropped_ids"})
     match_diffs = check_match(args, cfg, kept_digest, log)
     print(length_table(tok_stats), flush=True)
-    refuse = tok_stats["n_dropped_too_long"] > 0 and not args.allow_truncation
-    if refuse:
-        log("warning", msg=f"{tok_stats['n_dropped_too_long']} 条样本超过 max_len={args.max_len}（不截断，会被丢弃）："
-                           "正式训练会拒绝开训。加大 --max-len，或确认后加 --allow-truncation（S1 和对照要一致）。")
+    refuse, gate_msg = truncation_gate(tok_stats, args.allow_truncation)
+    log("truncation_gate", refuse=refuse, msg=gate_msg)
 
     if args.dry_run:
         hf_keys = list(C.model_weight_shapes(args.model))
@@ -600,22 +635,25 @@ def main(argv=None):
         rep = {"config": cfg, "data": data_report, "tokens": tok_stats, "planned_total_steps": planned,
                "stop_at_step": stop_at, "kept_ids_sha256": kept_digest, "n_lora_modules": len(lora),
                "lora_by_suffix": {s: sum(m["hf"].endswith("." + s) for m in lora) for s in targets},
-               "match_diffs": match_diffs, "would_refuse_training": refuse}
+               "match_diffs": match_diffs, "would_refuse_training": refuse, "truncation_gate": gate_msg}
         (out / "dryrun.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
         log("dry_run_done", n_kept=tok_stats["n_kept"], dropped=tok_stats["n_dropped_too_long"],
             planned_total_steps=planned, n_lora_modules=len(lora))
+        if not lora:
+            print(f"警告：底座权重里找不到后缀为 {targets} 的语言模型线性层（--model 指错了？）", flush=True)
+        print(("不能开训：" if refuse else "dry-run 结论：") + gate_msg, flush=True)
         return 0
 
     if refuse:
-        raise SystemExit(f"有 {tok_stats['n_dropped_too_long']} 条样本超过 --max-len {args.max_len}，拒绝开训"
-                         f"（例：{tok_stats['dropped_ids'][:5]}）。加大 --max-len，或确认后加 --allow-truncation。")
+        raise SystemExit("拒绝开训：" + gate_msg)
     import torch
 
     if not torch.cuda.is_available():
         raise SystemExit("没有 GPU")
     torch.manual_seed(args.seed)
     device = torch.device("cuda:0")
-    model = load_model(args, targets, log)
+    need_vision = any(C.image_refs(it["rec"]["messages"]) for it in items)
+    model = load_model(args, targets, log, need_vision=need_vision)
     audit = audit_trainable(model)
     (out / "lora_modules.json").write_text(json.dumps(
         [{"hf": m, "mlx": hf_module_to_mlx(m)} for m in audit["modules"]], ensure_ascii=False, indent=1),

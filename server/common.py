@@ -348,6 +348,50 @@ def template_has_thinking_switch(processor) -> bool:
     return "enable_thinking" in (tmpl or "")
 
 
+# ---------------------------------------------------------------- 加载底座（服务器）
+
+def load_base_model(model_path: str, attn: str | None = None, device_map=None, need_vision: bool = True):
+    """bf16 加载底座。Qwen3.5 是图文模型：先用 AutoModelForImageTextToText；不认识这个配置时退回
+    AutoModelForCausalLM（只有语言部分，模块名 model.layers.N…，LoRA 名称映射照样能用），
+    但数据里有图片（need_vision）就不许退回。dtype 关键字老版本叫 torch_dtype。"""
+    import torch
+    import transformers as tf
+
+    # device_map=False：不传 device_map（本机测试没有 accelerate 时用）
+    kw = {} if device_map is False else dict(device_map=device_map if device_map is not None else {"": 0})
+    if attn:
+        kw["attn_implementation"] = attn
+    errors = []
+    for cls_name in ("AutoModelForImageTextToText", "AutoModelForCausalLM"):
+        cls = getattr(tf, cls_name, None)
+        if cls is None:
+            continue
+        if cls_name == "AutoModelForCausalLM" and need_vision:
+            break
+        try:
+            try:
+                model, info = cls.from_pretrained(model_path, dtype=torch.bfloat16, output_loading_info=True, **kw)
+            except TypeError:
+                model, info = cls.from_pretrained(model_path, torch_dtype=torch.bfloat16, output_loading_info=True,
+                                                  **kw)
+        except (ValueError, KeyError, OSError) as e:
+            errors.append(f"{cls_name}: {e!r}"[:400])
+            continue
+        missing = list((info or {}).get("missing_keys") or [])
+        if cls_name != "AutoModelForImageTextToText":
+            print(f"警告：用 {cls_name} 加载（只有语言部分）：{errors}", flush=True)
+            if missing:  # 退回的类对不上检查点的键名时，权重会被随机初始化：绝不能拿它训练
+                raise SystemExit(f"{cls_name} 加载后缺 {len(missing)} 个权重（例 {missing[:3]}），停止")
+        elif missing:
+            print(f"警告：加载底座时缺 {len(missing)} 个权重（例 {missing[:3]}）", flush=True)
+        dt = next(model.parameters()).dtype
+        if dt != torch.bfloat16:  # 老版本可能把不认识的 dtype 关键字吞掉，按 fp32 加载
+            model = model.to(torch.bfloat16)
+        return model
+    hint = "；数据里有图片，不能退回纯文本模型" if need_vision else ""
+    raise SystemExit(f"加载不了底座 {model_path}{hint}：{errors}")
+
+
 # ---------------------------------------------------------------- 确定性顺序
 
 def _h(s: str) -> str:
