@@ -1,7 +1,23 @@
 # 服务器运行手册（RTX 5090）
 
-这份手册是明天在租来的 5090 上要做的全部步骤，按顺序做。命令可以直接复制。
+这份手册是在租来的 5090 上要做的全部步骤，按顺序做。命令可以直接复制。
 标了〔你亲自启动〕的是正式运行，必须由你本人在终端里按回车；其余步骤（环境、冒烟、dry-run）可以让助手代劳。
+
+## 上机后前 30 分钟（先做这几件，任何一步不过就停下来查，别往下赶）
+
+- [ ] **0–3 分钟　看机器**：`nvidia-smi`（RTX 5090、32 GB、右上角 CUDA ≥ 12.8）；`df -h ~`（可用 ≥ 80 GB）；`python3 --version`（≥ 3.10）。
+- [ ] **3–10 分钟　上传并核对**：按第 2 步上传脚本和数据包，`sha256sum` 和 Mac 上的逐个对上，解包到 `~/ld/pkg/`。
+- [ ] **10–12 分钟　核对数据包**（系统 python3 就能跑，不用等环境；先按第 2 步 `export PKG=...`）：
+      `python3 ~/ld/server/check_package.py $PKG --json ~/ld/logs/check_package.json`
+      最后一行必须是"结论：通过"。有"错误"就停：泄漏、缺图、坏 JSON、bench 用了没画框的原图，都不能开训。
+- [ ] **12–30 分钟　先装训练环境、先下 4B**（服务环境和冒烟放后面，不挡 dry-run）：
+      `cd ~/ld && STEPS="preflight net venv-train download" bash server/bootstrap.sh`
+      看日志里"快速路径自检 fla"一行是 `"ok": true`（不是也能训，只是慢几倍）。
+- [ ] **装好后马上做 4B dry-run**（第 5 步第一条命令，2–5 分钟，不碰 GPU）：这是能不能开训的判定。
+      终端里的表要看三件事：每个 task 的 token 长度 p50/p90/p99/max；"答案被截"列全是 0
+      （不是 0 时正式训练会直接拒绝开训）；最后一行是"dry-run 结论：…可以开训"。
+- [ ] **同时把 4B 的权重索引拿回 Mac 做名称核对**（第 4 步），决定 LoRA 目标。
+- [ ] 然后再跑剩下的：`STEPS="venv-serve check smoke" bash server/bootstrap.sh`（vLLM + 0.8B 冒烟，30–60 分钟）。
 
 ## 0. 一览
 
@@ -47,8 +63,9 @@ tar xzf server_scripts.tar.gz && tar xzf package_<标签>.tar.gz -C pkg
 ls pkg/                       # 确认数据包根目录，下面记作 $PKG
 ```
 
-数据包约定（由 `lab_detective/training` 打包，格式见 `docs/ARCHITECTURE.md` §2.5）：根目录下有训练 JSONL、验证 JSONL、
-冻结的 bench JSONL 和 `images/`。图片路径相对数据包根目录。下面假设：
+数据包约定（由 `lab_detective/training/package.py` 打包，格式见 `docs/ARCHITECTURE.md` §2.5）：
+`<包>/train.jsonl`、`val.jsonl`、`bench/bench_*.jsonl`、`images/`、`server/`、`MANIFEST.json`。
+图片路径相对数据包根目录。下面假设：
 
 ```bash
 export PKG=~/ld/pkg/package_<标签>       # 数据包根目录
@@ -56,7 +73,15 @@ export TRAIN=$PKG/train.jsonl VAL=$PKG/val.jsonl
 export BENCH="$PKG/bench/bench_*.jsonl"   # 冻结的 bench（11/8 冻结后单独上传时改成那个路径）
 ```
 
-文件名不一样就照实际改这几个变量，后面的命令不用动。
+文件名不一样就照实际改这几个变量，后面的命令不用动。然后先核对数据包（Mac 上打包后也跑一遍）：
+
+```bash
+python3 ~/ld/server/check_package.py $PKG --json ~/ld/logs/check_package.json   # 有错误时退出码 1
+```
+
+它查：布局、每行 JSON 和样本格式、图片存在且文件头正确、各文件按 task / source 的条数、字符长度分位数、
+诊断样本带 `meta.causes` 的比例、训练 / 验证对 bench 的 id / 内容 / 照片级泄漏、识别 bench 是否用了带编号框的图、
+`MANIFEST.json` 里每个文件的 sha256（数据不一致是错误，`server/` 脚本不一致只警告）、蒸馏样本不超过 5,248 条。
 
 ## 3. bootstrap
 
@@ -68,8 +93,9 @@ cd ~/ld && bash server/bootstrap.sh
 
 1. 预检：GPU 是 sm_120、驱动 CUDA ≥ 12.8、磁盘 ≥ 60 GB、Python ≥ 3.10。
 2. 探网：PyPI 镜像（清华 → 阿里 → 中科大 → 官方，选第一个通的）、PyTorch 源（官方 cu128 → 阿里镜像）、ModelScope、HF、hf-mirror。
-3. 训练环境 `~/ld/envs/train`：torch（cu128，检查有 sm_120 内核）、transformers ≥ 5.2、peft、trl、accelerate、datasets，
-   以及线性注意力快速路径 flash-linear-attention、causal-conv1d（装不上不致命，只是慢）。
+3. 训练环境 `~/ld/envs/train`：torch（cu128，检查有 sm_120 内核并真跑一次 GPU 矩阵乘）、transformers ≥ 5.2、peft、
+   accelerate（不装 trl / datasets，用不上），以及线性注意力快速路径 flash-linear-attention、causal-conv1d：
+   装完在 GPU 上和 torch 实现对一遍前向 + 反向，哪个不过就卸哪个（不致命，只是慢）。
 4. 服务环境 `~/ld/envs/serve`：vLLM（装不上就记下 `SERVE_BACKEND=hf`，评测改用 HF 生成）。
 5. 下载 Qwen/Qwen3.5-4B 和 Qwen/Qwen3.5-0.8B（ModelScope 优先，失败走 hf-mirror），校验 `model_type=qwen3_5`，写 `DOWNLOAD.json`。
 6. GPU 检查：bf16 矩阵乘吞吐、显存。
@@ -103,16 +129,19 @@ scp -P <端口> <用户>@<主机>:~/ld/models/Qwen3.5-4B/model.safetensors.index
     --targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj,in_proj_qkv,in_proj_z,in_proj_b,in_proj_a,out_proj
 ```
 
-- 第一条（默认：注意力 q/k/v/o + MLP）必须 `"ok": true`，否则不要开训，先把输出发给助手。
-- 第二条（再加线性注意力投影）也 `"ok": true` 的话，可以在训练时用 `--targets all-linear` 覆盖语言部分全部线性层；
-  不通过（例如 MLX 里这些投影被融合了）就保持默认。**选哪个要在 S1 之前定死，对照用同一个。**
+- 训练默认 `--targets all-linear`：语言模型里全部线性层 = 全注意力层 q/k/v/o + MLP + 线性注意力（Gated DeltaNet）投影
+  in_proj_qkv / in_proj_z / in_proj_b / in_proj_a / out_proj。Qwen3.5 大部分层是线性注意力，只挂 q/k/v/o 的话
+  这些层只有 MLP 被微调。视觉塔、词嵌入、lm_head 始终冻结。
+- 第二条（all-linear）`"ok": true`：保持默认，S1 和对照都不用加 `--targets`。
+- 第二条不通过、第一条 `"ok": true`（例如 MLX 里线性注意力投影被融合了）：S1 和对照都加 `--targets attn-mlp`。
+- 两条都不通过：不要开训，先把输出发给助手。**选哪个要在 S1 之前定死，对照用同一个。**
 - 索引里只有名字没有形状时只核对名字；有分片文件时也核对形状。
 
 ## 5. dry-run 和吞吐探针（服务器）
 
 ```bash
 source ~/ld/env.sh && cd ~/ld
-# 只分词：token 统计、超长丢弃数、泄漏检查、LoRA 模块清单，不碰 GPU（2–5 分钟）
+# 只分词：各 task 的 token 长度分位数、答案会被截掉的条数、泄漏检查、LoRA 模块清单，不碰 GPU（2–5 分钟）
 $T/bin/python $SRV/train_sft.py --model $M4 --train $TRAIN --data-root $PKG --leak-check $BENCH \
     --output runs/dry_s1 --dry-run
 # 对照的打乱统计
@@ -120,9 +149,15 @@ $T/bin/python $SRV/train_sft.py --model $M4 --train $TRAIN --data-root $PKG --le
     --output runs/dry_shuf --dry-run --shuffle-labels
 ```
 
+终端会打印一张表：每个 task 的 prompt / 答案 / 总长 token 分位数（p50/p90/p99/max，按全部样本统计）、
+"答案被截"（prompt + 答案 > max_len 的条数）和"prompt超长"（prompt 本身就放不下）。诊断样本一般 2,200–3,000 token。
+最后一行是结论："可以开训"或"不能开训"。答案比评测的 `--max-new-tokens 1536` 还长时表下会有警告。
+
 检查 `runs/dry_s1/dryrun.json`：
 - `data.leakage.clean` 为 true（不干净脚本会直接停）。
-- `tokens.n_dropped_too_long` 接近 0（超过 1% 就考虑 `--max-len 3072`，S1 和对照用同一个值）。
+- `tokens.n_dropped_too_long` 必须是 0、`would_refuse_training` 为 false。只要有一条答案会被截掉，正式训练就拒绝开训。
+  处理：加大 `--max-len`（如 6144，显存够）重做 dry-run；或确认这些样本可以丢掉后加 `--allow-truncation`
+  （超长样本整条丢弃，不做截断）。**S1 和对照用同一个设置。**
 - `tokens.full_render_mismatch_first20` 为 0。
 - `n_lora_modules` 和第 4 步核对的数量一致。
 - `runs/dry_shuf/dryrun.json` 里 `data.label_shuffle.frac_changed` 接近 1、`frac_top_changed` 约等于 1 − 1/候选数；
@@ -138,7 +173,22 @@ rm -rf runs/probe
 ```
 
 每步秒数 × `planned_total_steps`（dry-run 里有）超过 110 分钟时，给 S1 加 `--max-steps <110 分钟能跑的步数>`。
-这一步定下的数字写进研究计划。
+这一步定下的数字写进研究计划。粗估：每步 16 条 × 约 2,500 token ≈ 4 万 token；4B LoRA + 梯度检查点在 5090 上
+大约每秒几千 token，所以每步十几秒，2 小时约 500–700 步，不一定跑满 2 个 epoch，以探针实测为准。
+
+显存估算（4B、bf16、LoRA、梯度检查点、max_len 4096、微批次 1；探针日志里的 `gpu_mem_gb` 是实测值，以它为准）：
+
+| 部分 | 估算 |
+|---|---|
+| bf16 权重（约 2 字节/参数，含视觉塔） | 9–10 GB |
+| LoRA 参数 + 梯度 + AdamW 状态（all-linear 约 3–4 千万参数 × 16 字节） | < 1 GB |
+| 检查点激活：层数 × L × hidden × 2 字节 ≈ 32 × 4096 × 2560 × 2 | ≈ 0.7 GB |
+| 反向时重算的一层（MLP 中间层、注意力 / 线性注意力） | 1–2 GB |
+| 只算答案位置的 logits：约 1k × 词表 248k（bf16 + fp32 交叉熵副本 + 梯度） | 2–3 GB |
+| CUDA 上下文、分配器碎片 | 1–2 GB |
+| **合计** | **约 15–20 GB（32 GB 卡余量充足）** |
+
+没有 fla 快速路径时 torch 版 gated-delta 更费显存；探针峰值超过 28 GB 时先告诉助手，不要自己改批大小。
 
 ## 6. 训练 S1〔你亲自启动〕
 
@@ -151,13 +201,15 @@ $T/bin/python $SRV/train_sft.py --model $M4 --train $TRAIN --val $VAL --data-roo
 # 第 5 步定了步数上限就在末尾加 --max-steps <N>；第 4 步决定覆盖全部线性层就加 --targets all-linear
 ```
 
-固定超参（默认值，写进计划）：LoRA r=16、α=32、dropout 0.05；lr 2e-4，3% 预热后余弦降到 10%；微批次 2 × 累积 8；
-max_len 2048（超长丢弃）；bf16；梯度检查点；只对最后一条助手回复算损失；种子 1234。只用最终检查点 `runs/s1/final`。
+固定超参（默认值，写进计划）：LoRA r=16、α=32、dropout 0.05，目标 all-linear（语言模型全部线性层，第 4 步不通过时
+attn-mlp）；lr 2e-4，3% 预热后余弦降到 10%；微批次 1 × 累积 16（等效批 16）；max_len 4096（有答案会被截掉就拒绝开训）；
+bf16；梯度检查点；只对最后一条助手回复算损失；关闭思考（enable_thinking=False）；种子 1234。只用最终检查点 `runs/s1/final`。
 
 - 进度：`tail -f runs/s1/train_log.jsonl`（每 10 步一行：loss、lr、grad_norm、tokens_per_s、显存）。
 - 每 200 步或 30 分钟存一次断点（`runs/s1/checkpoint-*`，只留最近 2 个）。断线、崩溃后续跑：
   加 `--resume runs/s1/checkpoint-<步数>`，其余参数原样。
-- 爆显存：改 `--batch-size 1 --grad-accum 16`（等效批大小不变），对照也要同样改。
+- 爆显存（按上面的估算不应发生）：默认已是微批次 1、梯度检查点开着；先把日志发给助手。不要只给 S1 改 `--max-len`
+  或批大小——对照必须用完全相同的设置，`--match-steps-from` 会核对。
 - 结束后看 `runs/s1/summary.json`：`stopped_by`（steps 最好；time 说明到了时间闸）、`final_step`、`planned_total_steps`、
   `lora_B_norm` > 0、`val_loss`、`final_adapter_sha256`。
 
@@ -192,7 +244,9 @@ $EV --model merged/shuffled --arm shuffled  --out preds/shuffled.jsonl
 ```
 
 - `SERVE_BACKEND=hf` 时把 `EV` 换成：`$T/bin/python $SRV/merge_and_eval.py eval --backend hf --bench $BENCH --data-root $PKG`，
-  S1 和对照可以不合并：`--model $M4 --adapter runs/s1/final`。
+  S1 和对照可以不合并：`--model $M4 --adapter runs/s1/final`。3-shot 的提示约 1.2 万 token，HF 后端要加 `--batch-size 4`。
+- 默认 `--max-new-tokens 1536`（诊断答案约 500–1,000 token）、`--max-model-len 16384`（够 3-shot）。
+  `--data-root` 不写时按数据包布局推断（bench 在 `<包>/bench/` 下就取 `<包>`），写上更稳。
 - 中断后加 `--resume` 原样重跑，跳过已完成的 id。
 - 每个输出旁边有 `<文件>.summary.json`：`think_rate` 必须是 0，`json_ok_rate`、`length_cut_rate`、`error_rate` 记进实验记录。
 - 3-shot 的示例只取自训练池（同 task、纯文字、按 id 确定性挑选）。打分由 bench 模块在 Mac 上做，这里只生成。
