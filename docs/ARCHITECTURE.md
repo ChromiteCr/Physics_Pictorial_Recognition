@@ -1,6 +1,7 @@
 # P2 实验侦探：架构与模块接口（开发者必读）
 
 > 这份文件是并行开发的唯一接口约定。改接口先改这里。所有文字面向中学生的部分用中文。
+> 状态以 `docs/PROGRESS.md` 为准；本文描述接口和已有模块的职责，"已定稿"表示接口不再改动。
 
 ## 0. 产品与创新点（物理为主）
 
@@ -23,9 +24,10 @@
 
 ```
 lab_detective/
+  paths.py                  仓库、数据集、结果目录的统一路径
   labsim/core.py            公共接口（已定稿，见文件头建模约定）
-  labsim/registry.py        自动发现 experiments/*.py 里的 Experiment 子类
-  labsim/experiments/*.py   每个实验一个文件（hooke.py 是样板）
+  labsim/registry.py        自动发现 experiments/*.py 里的 Experiment 子类（新增实验只要新建文件）
+  labsim/experiments/*.py   精选实验的孪生，每个实验一个文件（hooke.py 是样板）；类属性 held_out 区分训练 / 留出
   labsim/generic.py         通用关系族 + 通用故障算子（"其他实验"和程序化任务族）
   physics/                  物理组件层：把精选实验拆成可复用组件，再组合出新装置的孪生（见 §2.8）
     base.py                 Effect（误差机制）、Ctx、Component、AuxMeasurement、Variant、Control、Setup、Affine
@@ -36,30 +38,43 @@ lab_detective/
     compose.py              Setup → ComposedExperiment（遵守 labsim/core.py 接口，引擎等模块不用改）
     catalog.py              镜像精选实验的装置 + 训练集里没有的新组合（默认留出）
     from_photo.py           识别结果（器材 + 线索）→ 候选装置 + 未决问题
-  engine.py                 贝叶斯后验（已定稿）
-  panel.py                  特征面板（已定稿）
-  eig.py                    期望信息增益、模拟闭环
-  atlas.py                  可辨识性图谱
+  engine.py                 贝叶斯后验：非线性参数放网格、线性参数解析积分，并给"不在清单里"用的失配统计量（已定稿）
+  panel.py                  特征面板：只用可观测量（截距、斜率比、曲率、散布偏大/偏小、漂移）（已定稿）
+  eig.py                    期望信息增益、模拟闭环（基础数据流与规划流分开，策略配对比较）
+  atlas.py                  可辨识性图谱：某方案下哪些原因分得开，哪次追加测量能分开分不开的一对
   uncertainty.py            不确定度预算（实验前）与传播
   twin.py                   孪生实例化：实验 id + 参数 → 预测曲线、预期读数、幽灵曲线
-  facts.py                  事实单 FactSheet（引擎输出的唯一出口）
-  knowledge/                实验卡 + 知识点图谱（JSON 数据 + 加载器）
-  vision/                   照片 → 构型 → 实验（YOLO 线索 + VLM 提示 + 解析 + 澄清问题）
-  tutor/                    探究式引导：会话状态机、上下文组装、模板讲解、声明校验器
-  llm/                      模型客户端（mlx_vlm.server / OpenAI 兼容 API / 脚本化兜底）
+  facts.py                  事实单 FactSheet（引擎输出的唯一出口，也是讲解校验的依据）
+  knowledge/                实验卡 + 知识点图谱（JSON 数据 + 加载器；数据随包安装）
+  vision/                   照片 → 构型 → 实验：cues（YOLO 线索与规则）、som（编号框）、letters（字母表）、
+                            prompt/schema/pipeline（模型兜底 + 澄清问题 + 手动选择）、build_dataset（识别样本）
+  tutor/                    探究式引导：session（会话状态机）、context（按阶段组装上下文）、policy（脚本导师）、
+                            templates（模板讲解）、verifier（声明校验器）
+  llm/                      模型客户端 client.py：OpenAI 兼容接口（mlx_vlm.server / DeepSeek / OpenAI），
+                            一律关闭思考，所有请求与回复写 JSONL 日志；产品里只连本机服务
   training/                 训练样本生成、蒸馏流水线、打包
+    format.py               样本格式（§2.5）、读写、泄漏检查
     prompts.py              提示词的唯一来源（训练、蒸馏、bench、推理共用）+ 输出 JSON schema（见 §2.7）
     splits.py               训练/留出实验、每个训练实验扣下的原因、种子命名空间、训练/验证划分
     tasks_diagnose.py       诊断样本（含"自己提出原因"变体）；tasks_design.py 实验前规划；
     tasks_explain.py        事实单讲解（3 种措辞/槽位，必须过校验器）；tasks_knowledge.py 知识点问答
     generate.py             命令行：多进程生成 results/{train,val}/<任务>.jsonl
-  bench/                    物理 bench、识别 bench（生成、冻结、评分）
+    distill.py              离线蒸馏：教师盲做，只保留与物理引擎判定一致的输出，总数 ≤ 5,248（见 §2.9）
+    package.py              打包给 5090：样本、被引用的图片（长边 ≤ 768）、冻结的 bench、服务器脚本、清单与哈希
+  bench/                    评测基准
+    freeze.py               冻结：文件逐个算 SHA-256 写清单（只能由学生本人运行）
+    stats.py                精确 McNemar、Wilson 区间、精确符号检验、配对 bootstrap、TOST、Holm、Brier、ECE
     recognition_bench.py    识别 bench：按拍摄时段切分、生成 test.jsonl、打分、规则基线（见 §2.6）
     review_gallery.py       识别照片审核图册 review.html（学生逐张确认标签，导出 review.json）
-server/                     5090 上的脚本（引导、训练、合并、评测、转 MLX）
-app.py + ui/                Streamlit 界面
+  fieldkit/                 真实故障注入实验工具包（见 §2.10）
+server/                     5090 上的脚本（见 §2.11）：bootstrap.sh、common.py、train_sft.py、merge_and_eval.py、convert_adapter.py
+app.py + ui/                Streamlit 界面（见 §2.12）
+tools/yolo/                 YOLO 数据与训练工具（P1 起）；detect.py 为 YOLO 器材识别入口
 tests/                      pytest，每个模块一个文件
 ```
+
+物理 bench（诊断、下一次测量、迁移到留出实验的冻结测试集及其打分）与高保真错配模拟器、对照模型运行器按同一套约定放在 `bench/` 下，
+落地后在 §2.6 旁边补接口；在此之前它们的目标与规格见 `docs/isef/2026-10-31-isef-upgrade-design.md` §16。
 
 ## 2. 关键数据结构（JSON 可序列化）
 
@@ -206,10 +221,50 @@ bench 由学生冻结，开发侧只生成、打分，**从不调用 `bench.free
 按必需器材组、可选器材、线索词、常见程度和识别出的 experiment_id 打分，由器材选计时器（光电门 / 打点计时器 / 秒表），
 返回 `PhotoCandidate`（entry_id、score、options、reasons、open_questions、setup）。一个都匹配不上时返回空列表，交给"其他实验"通道。
 
+### 2.9 蒸馏流水线（training/distill.py）
+只在构建训练数据时运行；产品里从不调用任何外部模型。唯一借鉴格物论文的做法：**教师盲做**——教师看到的提示和学生训练时的提示完全相同
+（同一个 `training/prompts.py`），看不到物理引擎的答案；**只保留与可核验标准一致的输出**——标准是物理引擎的判定（等价类内的最可能原因、
+信息增益前两名的追加测量）以及声明校验器；总数不超过 `MAX_DISTILLED = 5248`。
+- 教师来源：DeepSeek（API，key 放在 `~/.config/ppr/keys.env`，一行 `DEEPSEEK_API_KEY=...`，不进仓库、不打印）；
+  没有 API 的教师（Hy4）走 `export_prompt_pack()` 导出提示词包，学生在别处跑完，`import_responses()` 用同一套过滤规则读回。
+- 蒸馏样本 `source = "distill-deepseek" | "distill-hy4"`，训练提示里保留教师当时看到的指令；API 输出只能以这种方式（过滤后）进入训练，
+  且在 bench 冻结之前定好；bench 样本、bench 变体不进蒸馏题目。
+
+### 2.10 真实故障注入工具包（fieldkit/）
+学生本人在真实器材上测量；成年人只做安全监督并按密封卡设置故障；记录表里没有任何关于人的信息。
+流程：`schedule`（预先提交的随机表：公开表 + 密封表 + 密封卡 + 记录表模板，两个哈希写进研究计划；课次平衡、追加测量顺序拉丁方、图谱混淆检查）
+→ `live`（每次基础方案做完，算信息增益推荐的追加测量，留回执与基础读数指纹）→ `ingest`（检查并哈希冻结记录表，转成引擎数据集）
+→ `analysis`（学生本人启动预先规定的分析：拆封、核对、逐项追加后验、配对 Wilcoxon、Wilson 区间、图谱预测效度；只输出数字，解读由学生写）。
+`cards.py` 生成可打印的离线密封卡，`sheet.py` 读写 CSV 记录表，`student_sheet.py` 生成手推清单，`catalog.py` 给出可注入的故障目录。
+精选实验只是起点；单摆等走"其他实验"通道（通用关系族 + 通用故障算子），留出孪生做对照引擎。
+
+### 2.11 服务器脚本（server/）
+`server/` 自成一体（不导入 `lab_detective`），上传服务器时只需它和数据包；布局、命令、检查点全在 `server/README.md`。
+- `bootstrap.sh`：预检（sm_120、CUDA ≥ 12.8、磁盘）、探网（PyPI 镜像 / ModelScope / HF）、训练环境与服务环境（vLLM 装不上则回退 HF 生成）、
+  下载 Qwen3.5-4B 与 0.8B、0.8B 全链路冒烟（输出丢弃）。
+- `common.py`：训练 JSONL 读取与校验、对话模板渲染和"只对最后一条助手回复算损失"的掩码（prompt 必须以空思考块结尾）、
+  确定性打乱（只由 seed、epoch、id 决定）、泄漏检查、打乱标签对照。
+- `train_sft.py`：LoRA r=16、α=32、dropout 0.05，挂在语言部分的线性层，视觉塔/词嵌入/lm_head 冻结；bf16 + 梯度检查点；
+  默认 max_len 4096（诊断样本约 2,000–3,000 token），超长样本不截断——正式训练遇到超长即拒绝开训；
+  `--max-minutes` 时间闸、断点续跑；`--shuffle-labels` 与 `--match-steps-from` 保证打乱标签对照与 S1 步数和批次一致；`--dry-run` 报 token 分位数。
+- `merge_and_eval.py`：合并适配器；在 bench JSONL 上贪心批量生成（vLLM 或 HF），支持 3-shot（示例只取自训练池）、断点续跑，每条回复检查有无思考标记。
+- `convert_adapter.py`：PEFT LoRA → mlx-vlm 适配器（转置 A/B、scale = α/r、改模块名前缀），自带名称核对子命令。
+
+### 2.12 界面（app.py + ui/）
+`app.py` 只负责页面骨架和侧栏；每一步一个文件：`step_identify`（拍照识别）、`step_design`（实验设计）、`step_measure`（测量）、
+`step_diagnose`（诊断）、`step_explain`（讲解与知识点）。纯逻辑模块不 import streamlit，可单独测试：
+`catalog`（实验目录：精选实验 + "其他实验"，实验键是字符串，同一份 spec 永远得到同一个孪生）、`lab`（数据表 ↔ 观测、逐行实时对照、
+事实单与幽灵曲线封装、测量范围建议、修正后复测）、`llm`（探测本机模型服务，0.5 秒超时）、`charts`（Altair）。
+`theme` 是黑板主题，只用系统字体，完全离线。
+- **默认脚本模式**：模板讲解，不需要模型；侧栏打开"模型模式"才探测本机地址，探测不到就继续用脚本模式。
+- **先预测再测量**：学生写下自己的预测（或明确跳过）之前，孪生的预测数字不显示。
+- **手动选择永远可用**：流水线不覆盖学生的选择。
+- `tests/test_app.py` 检查界面不 import `explain_api` / `zhipuai` / `intent_classifier`，页面文案里没有固定实验数。
+
 ## 3. 统一约定
 - 纯 numpy/scipy，不引入新依赖（需要时在 pyproject 里集中加，由主会话处理）。
 - 随机性只用 `np.random.Generator`，所有生成函数接受 `seed`。
 - 每个模块配 `tests/test_<模块>.py`，单个测试 < 10 秒；整套测试 < 2 分钟。
 - 本机内存上限：我们启动的所有进程合计 ≤ 24 GB；测试和生成任务控制在 < 2 GB。
-- 不调用任何外部 API（蒸馏脚本除外，且只由用户提供 key 后手动运行）。
+- 产品和测试不调用任何外部 API；只有蒸馏脚本在用户提供 key 后手动运行，评测对照的 API 运行器同理且只由学生启动。
 - 提交信息不写 AI 工具名；AI 写的代码记进 docs/AI_USAGE.md。
