@@ -250,3 +250,21 @@ def test_distill_deepseek_with_fake_teacher(tmp_path):
     assert D.cmd_deepseek(a, teacher=teacher, root=tmp_path) == 0
     raw = tmp_path / "deepseek_guide" / "raw_results.jsonl"
     assert len(raw.read_text(encoding="utf-8").splitlines()) == 2
+
+
+# ── 实验卡 ────────────────────────────────────────────────────────────
+
+def test_card_examples_valid_and_deterministic():
+    from lab_detective.training import tasks_card as C
+
+    fams = set()
+    for i in range(20):
+        ex = C.build_example(i, "train")
+        assert ex.to_dict() == C.build_example(i, "train").to_dict()
+        out = json.loads(ex.messages[-1]["content"])
+        assert C.validate_card_output(out) == []
+        assert out["relation_family"] == ex.meta["relation_family"]
+        assert not any(ch in "0123456789" for s in out["steps"] for ch in s.replace("6 组", ""))  # 步骤不写设定值
+        fams.add(ex.meta["relation_family"])
+    assert len(fams) >= 2
+    assert C.validate_card_output('{"name_zh": "x"}')
