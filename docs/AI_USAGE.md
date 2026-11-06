@@ -22,44 +22,61 @@
 ### 1.3 披露方式
 
 - 仓库所有者的规则：**提交信息里刻意不写任何 AI 工具名**。因此本台账承担披露责任：每次有 AI 参与的改动，都要在第 3 节「变更日志」里登记日期和范围。
-- 提示词日志放在 `docs/isef/isef-upgrade-logs/`（建设中），完整的会话记录另行留存（会话记录的保存位置未核实）。
-- AI 编写的代码默认流程：AI 编写 → GPT 代理审查 → 并入。尚未落地的模块状态为「计划中」。
+- 提示词日志放在 `docs/isef/isef-upgrade-logs/`（规划阶段的对话、评审、调研原文，以及后续阶段的工作流脚本存档）；完整的会话记录保存在
+  `~/.claude/projects/-Users-billgao-Documents-Coding-SCPKU-Proj/` 下的 jsonl 文件（两个工作流各自的 journal 在同目录 `subagents/workflows/` 下）。
+- AI 编写的代码默认流程：AI 编写 → GPT 代理审查（另一台机器，材料由学生转交）→ 并入。「审查者」一列写"待审查"表示审查尚未发生或未核实。
+- 产品不调用任何外部模型；训练样本的标签来自确定性代码。只有蒸馏脚本在学生提供 key 后手动运行时才会调用教师 API，其输出以过滤后的蒸馏样本形式进入训练（见 ARCHITECTURE §2.9），运行日志另存。
 
 ## 2. 模块归属表
 
-说明：
-
-- 「计划中」的模块文件**尚未存在**；其路径是规划位置，落地时按实际路径更正（未核实）。
-- 「作者」列只写事实：AI 实际改过的文件才写 AI。
+说明：「作者」列只写事实：AI 实际改过的文件才写 AI；「审查者」一列未核实的写"待审查"。
 
 | 模块/文件 | 作者（AI/学生） | 审查者 | 状态 |
 | --------- | --------------- | ------ | ---- |
-| `tools/yolo/*`（`train.py`、`prepare_dataset.py`、`extract_video_frames.py`、`autolabel.py`、`autolabel_glm.py`、`gen_label_gallery.py`、`pilot_yolo_probe.py`、`class_descriptions.json`） | 脚本本体为 P1 阶段原作（作者归属未核实）；**2026-11-05 由 AI 移动文件并修改路径常量**（`PROJ` / `PROJ_DIR` / `DATA_DIR` 改为 `parents[2]`） | 未核实 | 已完成（2026-11-05 重构提交） |
-| `detect.py` | P1 阶段原作（作者归属未核实）；**2026-11-05 AI 修改**：默认权重路径改为 `assets/weights/best.pt`，并加入环境变量 `PPR_YOLO_WEIGHTS` 覆盖 | 未核实 | 已完成（2026-11-05 重构提交） |
-| `pyproject.toml` | AI（2026-11-05） | 未核实 | 已完成（2026-11-05 重构提交） |
-| `.gitignore` | AI 追加 P2 相关忽略项（2026-11-05） | 未核实 | 已完成（2026-11-05 重构提交） |
-| `README.md`、`docs/AI_USAGE.md` | AI 起草（2026-11-05） | 学生核对（未核实是否已完成） | 已起草 |
-| `lab_detective/labsim/core.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `engine.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `panel.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `eig.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `experiments/*` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `eval/*` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `server/*` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `convert_adapter.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `local_llm.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `watchdog.py` | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `app.py`（P2 新增 UI 部分） | AI | GPT 代理 | 计划中 / AI 编写，GPT 审查 |
-| `lab_detective/physics/*`（物理组件层）、`tests/test_physics_*.py` | AI（2026-11-05） | GPT 代理（未核实是否已审查） | AI 编写，待审查 |
-| `lab_detective/training/prompts.py`、`splits.py`、`tasks_diagnose.py`、`tasks_design.py`、`tasks_explain.py`、`tasks_knowledge.py`、`generate.py`；`tests/test_training_tasks.py` | AI（2026-11-05） | GPT 代理（未核实是否已审） | 已完成代码与测试；扣下原因的选择待学生确认 |
-| 研究计划 | 学生本人 | — | 学生本人完成（进度未核实） |
+| `tools/yolo/*`、`detect.py` | 脚本本体为 P1 阶段原作（作者归属未核实）；2026-11-05 由 AI 移动文件、修改路径常量与默认权重路径 | 待审查 | 已完成 |
+| `pyproject.toml`、`.gitignore` | AI | 待审查 | 已完成 |
+| `README.md`、`docs/ARCHITECTURE.md`、`docs/AI_USAGE.md`、`docs/isef/*.md`（工程文档） | AI 起草（2026-11-05 起；2026-11-06 整体重写） | 学生核对（未核实是否已完成） | 已起草 |
+| `lab_detective/labsim/`（`core.py`、`registry.py`、`generic.py`、`experiments/*`） | AI（物理推导与默认先验为 AI 起草的工程假设，未经学生审核） | 物理复核由 AI 子代理做过；GPT 与学生审核待做 | 已完成代码与测试；物理卡待学生审核 |
+| `lab_detective/physics/*`（物理组件层） | AI | 待审查 | 已完成；新组合的装置细节待学生确认 |
+| `engine.py`、`panel.py`、`eig.py`、`atlas.py`、`uncertainty.py`、`twin.py`、`facts.py` | AI | 待审查（GPT 差分测试待做） | 已完成 |
+| `lab_detective/knowledge/*`（知识点图谱、实验卡） | AI 起草 | 待学生核对 | 已完成 |
+| `lab_detective/vision/*`、`tutor/*`、`llm/*` | AI | 待审查 | 已完成 |
+| `lab_detective/training/*`（`prompts.py`、`splits.py`、`tasks_*.py`、`generate.py`、`distill.py`、`format.py`、`package.py`） | AI | 待审查 | 已完成；扣下的原因与配比待学生确认 |
+| `lab_detective/bench/*`（`freeze.py`、`stats.py`、`recognition_bench.py`、`review_gallery.py`） | AI | 待审查 | 已完成；冻结由学生本人运行，AI 从未运行冻结 |
+| `lab_detective/fieldkit/*` | AI | 待审查 | 已完成；真实数据与分析由学生本人启动 |
+| `server/*` | AI | 待审查 | 已完成脚本与单元测试；尚未在 5090 上由学生运行验证 |
+| `app.py`、`ui/*` | AI | 待审查 | 已完成（含测试） |
+| `tests/*` | AI | 待审查 | 已完成 |
+| 物理 bench、高保真错配模拟器、对照模型运行器 | AI | 待审查 | 进行中 |
+| `docs/student/*` | AI 起草的操作清单和决定清单（不含研究计划文字、不含文献） | 学生使用 | 已完成 |
+| 研究计划、摘要、海报、论文、结论、未来工作、文献检索 | 学生本人 | — | 学生本人完成（进度未核实） |
 | 手推原因特征 | 学生本人 | — | 学生本人完成（进度未核实） |
 | 亲手实现的故障模型（胡克零点偏移） | 学生本人 | — | 学生本人完成（进度未核实） |
-| 物理卡审核 | 学生本人 | — | 学生本人完成（进度未核实） |
+| 物理卡审核、识别照片标签审核、bench 冻结与哈希、全部阈值与登记项 | 学生本人 | — | 学生本人完成（进度未核实） |
+| 真实故障注入实验的测量与分析 | 学生本人（成年人只做安全监督和按密封卡设置故障） | — | 未开始（未核实） |
 
 ## 3. 变更日志
 
 按日期倒序，新条目加在最上面。每条写清：日期、改动范围、哪些由 AI 完成。
+
+### 2026-11-06（五）：文档整体重写
+
+- AI 重写 `README.md`（P2 概览在前、P1 历史在后；版本 P2a、P2b）、`docs/ARCHITECTURE.md`（目录补 `fieldkit/`、`bench/` 各模块、`training/distill.py`、`server/`、`ui/`，新增 §2.9–§2.12）、
+  `docs/isef/2026-10-31-isef-upgrade-design.md`（按当前方向整体重写，文末附版本沿革）、`docs/isef/2026-11-05-implementation-plan.md`（已建成 / 进行中 / 待办 / 排期）、
+  `docs/isef/innovation-and-boundaries.md`、`docs/isef/bench-comparators.md` 的措辞，以及本台账。
+- 设计文档里所有阈值、目标和登记项保持为学生待定事项（§14），文中没有替学生填写任何答案；文献线索仍只是线索。
+
+### 2026-11-06（五）：第二轮开发（界面、服务器脚本复核）
+
+- AI 重写 `app.py` 并新建 `ui/` 五步界面与 `tests/test_app.py`（中断保存的提交里有未完成部分，以 `docs/PROGRESS.md` 和测试结果为准）；
+  复核并修改 `server/*`（序列长度 4096、超长样本拒绝开训、dry-run 报告 token 分位数等）。
+  蒸馏流水线、打包脚本、冻结与统计库属于更早的开发提交，细节以 git 历史为准。
+- 蒸馏教师的 key 由学生提供，不进仓库。
+
+### 2026-11-05（四）：真实故障注入工具包与学生材料
+
+- AI 新建 `lab_detective/fieldkit/`（随机表、密封卡、记录表、实时推荐、冻结与预先规定的分析）、`docs/student/*`（手推清单由代码生成，只描述物理过程，不放预期特征和修正）。
+- 待学生确认：随机表的种子与承诺方式、故障配方里的幅度选项（AI 按各原因的先验范围挑选）。
 
 ### 2026-11-05（五）：物理组件层
 
