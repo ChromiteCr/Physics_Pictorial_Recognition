@@ -27,7 +27,7 @@ from .format import Example, content_hash, write_jsonl
 from .splits import (BASE_SEED, HELD_OUT_EXPERIMENTS, TRAIN_EXPERIMENTS, VAL_FRACTION, WITHHELD_CAUSES,
                      split_counts)
 
-TASKS = ("diagnose", "design", "explain", "knowledge")
+TASKS = ("diagnose", "design", "explain", "knowledge", "guide", "card", "recognize")
 MAX_WORKERS = 6
 REPO = Path(__file__).resolve().parents[2]
 
@@ -41,6 +41,10 @@ def _builder(task: str):
         from .tasks_explain import build_example
     elif task == "knowledge":
         from .tasks_knowledge import build_example
+    elif task == "guide":
+        from .tasks_guide import build_example
+    elif task == "card":
+        from .tasks_card import build_example
     else:
         raise ValueError(task)
     return build_example
@@ -125,6 +129,11 @@ def generate(counts: dict[str, int], out: str | Path, workers: int = 1, chunk: i
             n = int(counts.get(task, 0) or 0)
             if n <= 0:
                 continue
+            if task == "recognize":  # 照片样本：主进程一次生成全部合格照片（n 截断训练条数），不走序号分块
+                from .tasks_recognize import generate_recognize
+
+                report["tasks"][task] = generate_recognize(out, n, quiet=quiet)
+                continue
             n_train, n_val = split_counts(n)
             if task == "knowledge":
                 from .tasks_knowledge import pool_size
@@ -164,6 +173,9 @@ def main(argv=None) -> None:
     ap.add_argument("--n-design", type=int, default=0)
     ap.add_argument("--n-explain", type=int, default=0)
     ap.add_argument("--n-knowledge", type=int, default=0)
+    ap.add_argument("--n-guide", type=int, default=0)
+    ap.add_argument("--n-card", type=int, default=0)
+    ap.add_argument("--n-recognize", type=int, default=0, help="识别样本训练条数上限（合格照片 × 3 个变体，大于总数时取全部）")
     ap.add_argument("--workers", type=int, default=1, help=f"进程数（最多 {MAX_WORKERS}）")
     ap.add_argument("--chunk", type=int, default=25, help="每块样本数")
     ap.add_argument("--seed", type=int, default=BASE_SEED, help="基础种子（bench 必须用别的命名空间）")
@@ -183,7 +195,8 @@ def main(argv=None) -> None:
     if a.eig_samples is not None:
         opts["diagnose"]["n_samples"] = a.eig_samples
         opts["explain"]["n_samples"] = a.eig_samples
-    counts = {"diagnose": a.n_diagnose, "design": a.n_design, "explain": a.n_explain, "knowledge": a.n_knowledge}
+    counts = {"diagnose": a.n_diagnose, "design": a.n_design, "explain": a.n_explain, "knowledge": a.n_knowledge,
+              "guide": a.n_guide, "card": a.n_card, "recognize": a.n_recognize}
     rep = generate(counts, a.out, a.workers, a.chunk, a.seed, opts)
     print(json.dumps(rep["tasks"], ensure_ascii=False, indent=2))
 
