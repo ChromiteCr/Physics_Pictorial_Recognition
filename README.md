@@ -221,4 +221,4 @@ python detect.py 照片.jpg --conf 0.25                                         
 
 ## 📄 许可证
 
-MIT License
+沿用 P1 的声明：MIT License（仓库里暂时没有 LICENSE 文件，待学生补上）。YOLOv8（ultralytics）本身是 AGPL-3.0，Qwen3.5 系列是 Apache-2.0。
