@@ -4,7 +4,9 @@
 后面的孪生和诊断由代码按这张卡组合（generic.spec_from_card）。目标全部由程序化实例的 spec 确定性给出，模型不算物理。
 - 字段是 knowledge/schema.py CARD_SCHEMA 的子集（name_zh、goal、formula、relation_family、variables、apparatus、
   steps、data_table），子模式直接取自 CARD_SCHEMA，保证与正式实验卡同一写法。
-- 提示只给实验名称和两件测量工具；目标里不写任何具体设定值（提示里没有的数字一律不出现）。
+- 提示给实验名称、两件测量工具和学生说的自变量 / 因变量名称（目标由提示唯一确定）；目标里不写任何具体设定值。
+- 注意：程序化定律只有十几种，提示只有约 50 种不同写法；generate 会删掉与验证集同提示的训练样本，
+  --n-card 取 100–150 就够，再多只是重复。
 - 物理组件层的组合实验没有用：镜像组合与精选实验重复，新组合全部是留出实验。
 种子：任务码 7，与 splits.example_seed 同一做法。
 """
@@ -51,9 +53,10 @@ def card_seed(split: str, index: int, base: int = BASE_SEED) -> int:
     return int(ss.generate_state(1, dtype=np.uint64)[0] >> np.uint64(1))
 
 
-def card_messages(name: str, tools: list[str]) -> list[dict]:
+def card_messages(name: str, tools: list[str], x_name: str = "", y_name: str = "") -> list[dict]:
+    var = f"\n【学生说】要改变的是{x_name}，要测的是{y_name}" if x_name and y_name else ""
     user = (f"【任务】实验卡：学生要做一个清单之外的实验。\n【实验】{name}\n【学生手上的测量工具】{'、'.join(tools)}"
-            f"\n\n{CARD_RULES}")
+            f"{var}\n\n{CARD_RULES}")
     return [{"role": "system", "content": SYSTEM_PROMPT_ZH}, {"role": "user", "content": user}]
 
 
@@ -103,7 +106,7 @@ def build_example(index: int, split: str, base_seed: int | None = None) -> Examp
     meta = {"experiment_id": family, "instance_id": exp.id, "split": split, "seed": seed,
             "relation_family": exp.family, "generic": True}
     ex = Example(f"card-{family}-{split}-{index:06d}", "card", "engine",
-                 card_messages(exp.name_zh, tools) + [{"role": "assistant",
+                 card_messages(exp.name_zh, tools, exp.xv["name"], exp.yv["name"]) + [{"role": "assistant",
                                                        "content": json.dumps(target, ensure_ascii=False)}], meta)
     ex.validate()
     return ex
