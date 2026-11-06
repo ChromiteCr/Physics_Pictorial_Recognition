@@ -1,6 +1,6 @@
 # 实验侦探 Lab Detective（力学实验 AI 伙伴）
 
-![version](https://img.shields.io/badge/version-P2b-blue)
+![version](https://img.shields.io/badge/version-P2b1-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/Physics_Pictorial_Recognition)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/Physics_Pictorial_Recognition)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/Physics_Pictorial_Recognition)
@@ -209,6 +209,7 @@ python detect.py 照片.jpg --conf 0.25                                         
 
 | 版本 | 日期       | 变更内容                                                                                                   | 类型      |
 | ---- | ---------- | ------------------------------------------------------------------------------------------------------------ | --------- |
+| P2b1 | 2026-11-06 | 集成与 5090 数据包：打包时 bench 图片取自 bench 目录（识别 bench 带框图）；生成器加 --exclude 排除与 bench 撞题的样本；全量生成训练数据、重建物理 bench、泄漏核对全部干净，打出 package_20261106 并通过开训前核对 | fix       |
 | P2b  | 2026-11-06 | 训练数据与评测基准、5090 训练脚本、新界面：引擎标注的训练样本生成器与蒸馏流水线、打包脚本、识别 bench 与审核图册、冻结与统计库、服务器脚本（引导、LoRA 训练、合并评测、转 MLX）、真实故障注入工具包、五步新界面（离线、默认脚本模式）、文档按当前方向重写 | feat      |
 | P2a  | 2026-11-06 | 物理孪生、贝叶斯引擎、信息增益与可辨识性图谱、组件组合层：精选实验的物理孪生与贝叶斯引擎、EIG 与图谱、不确定度预算、事实单、物理组件层（组合出新装置的孪生，镜像精选实验逐项一致） | feat      |
 | P2   | 2026-11-05 | 进入 ISEF 升级阶段（实验侦探）：仓库重构（YOLO 工具移入 tools/yolo、旧笔记移入 docs/history、权重改放 assets/weights、新增 pyproject 与 uv 环境） | milestone |
