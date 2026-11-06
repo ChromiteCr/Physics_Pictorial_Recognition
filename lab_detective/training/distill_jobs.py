@@ -71,6 +71,12 @@ def _diag_case(index: int, base_seed: int = BASE_SEED):
 
 
 MIN_POINTS = 3  # 蒸馏只用至少 3 个测量点的诊断题
+# 学生看不懂的内部术语，以及与"不替学生写结论"冲突的措辞：出现就不收
+STUDENT_FACING_BANNED = ("事实单", "材料里", "可引用数字", "特征词表", "照抄")
+
+
+def banned_terms(text: str) -> list[str]:
+    return [w for w in STUDENT_FACING_BANNED if w in (text or "")]
 EIG_NEAR_BEST = 0.8  # 教师选的追加测量信息增益 ≥ 最优的 80% 也算对
 
 
@@ -155,6 +161,8 @@ def check_diagnose(text: str, ref: dict, id_map: dict, menu_map: dict) -> tuple[
         if item is None or (not ref["no_separation"] and item not in ref["top2_items"] and not near_best):
             return False, {"reason": "next_item", "teacher": item, "engine_top2": ref["top2_items"]}
     ex = obj["explanation"]
+    if banned_terms(ex):
+        return False, {"reason": "jargon", "detail": banned_terms(ex)}
     labels = ref.get("item_labels") or {}
     for disp, item in menu_map.items():  # 只为校验替换编号，训练目标保留教师原文
         if item in labels:
@@ -193,6 +201,8 @@ def check_guide(text: str, category: str, fs: dict | None, cause_names, revealed
         probs.append("要学生回答的阶段必须恰好问一个问题")
     if len(t) > MAX_GUIDE_CHARS:
         probs.append(f"太长（{len(t)} 字）")
+    if banned_terms(t):
+        probs.append(f"出现内部术语或让学生照抄：{banned_terms(t)}")
     return (not probs), {"reason": "ok" if not probs else "guide", "detail": probs[:3]}
 
 
@@ -345,7 +355,7 @@ def import_pack(folder: Path = PACK_DIR, root: Path = DISTILL_DIR, base_seed: in
 
 def to_train(root: Path = DISTILL_DIR, out: Path = REPO / "results" / "train", base_seed: int = BASE_SEED) -> dict:
     """保留的教师输出 → 训练样本（提示原样，答案 = 教师最终输出），按教师写 distill_<教师>.jsonl，总数不超过上限。"""
-    rep, left = {}, MAX_DISTILLED
+    rep, left, dropped = {}, MAX_DISTILLED, 0
     for raw in sorted(Path(root).rglob("raw_results.jsonl")):
         teacher = "hy4" if raw.parent.name.startswith("hy4") else "deepseek"
         exs = []
@@ -359,6 +369,15 @@ def to_train(root: Path = DISTILL_DIR, out: Path = REPO / "results" / "train", b
             if job is None:
                 continue
             text = re.sub(r"<think>.*?</think>", "", r["text"], flags=re.S).strip()
+            student_text = text
+            if job.task == "diagnose":  # 诊断题只看给学生的讲解字段（JSON 键名不算）
+                try:
+                    student_text = str(json.loads(text).get("explanation", ""))
+                except (ValueError, AttributeError):
+                    student_text = text
+            if banned_terms(student_text):  # 旧规则下保留的样本也按新的措辞要求重筛
+                dropped += 1
+                continue
             meta = dict(job.meta, teacher=r.get("teacher"), split="train")
             exs.append(Example(f"distill-{teacher}-{job.id}", job.task, f"distill-{teacher}",
                                list(job.messages) + [{"role": "assistant", "content": text}], meta))
@@ -366,6 +385,8 @@ def to_train(root: Path = DISTILL_DIR, out: Path = REPO / "results" / "train", b
         if exs:
             path = Path(out) / f"distill_{raw.parent.name}.jsonl"
             rep[str(path)] = write_jsonl(path, exs)
+    if dropped:
+        print(f"按措辞要求剔除 {dropped} 条（内部术语或让学生照抄）", file=sys.stderr)
     return rep
 
 

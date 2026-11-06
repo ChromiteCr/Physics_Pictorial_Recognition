@@ -90,7 +90,7 @@ class DeepSeekTeacher:
             self.base_url + "/chat/completions", data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"})
         last = None
-        for attempt in range(4):
+        for attempt in range(6):  # 限流（429）时退避 1、2、4、8、16 秒
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as r:
                     data = json.loads(r.read().decode("utf-8"))
@@ -137,8 +137,13 @@ def run(jobs: Iterable[DistillJob], teacher: Callable[[list[dict]], tuple[str, d
     kept_total = already_kept + _count_kept(raw_path)
     jobs = [j for j in jobs if j.id not in done]
 
-    def work(job: DistillJob) -> DistillResult:
-        text, usage = teacher(job.messages)
+    def work(job: DistillJob) -> DistillResult | None:
+        try:
+            text, usage = teacher(job.messages)
+        except Exception as e:  # 单条失败（限流、网络）：不写结果，续跑时会重试
+            stats["errors"] = stats.get("errors", 0) + 1
+            stats["last_error"] = str(e)[:200]
+            return None
         ok, info = job.check(text)
         return DistillResult(job.id, teacher_name, text, ok, info, usage)
 
@@ -149,6 +154,8 @@ def run(jobs: Iterable[DistillJob], teacher: Callable[[list[dict]], tuple[str, d
                 break
             batch = jobs[i:i + workers * 4]
             for res, job in zip(ex.map(work, batch), batch):
+                if res is None:
+                    continue
                 stats["submitted"] += 1
                 stats["kept" if res.kept else "rejected"] += 1
                 kept_total += int(res.kept)

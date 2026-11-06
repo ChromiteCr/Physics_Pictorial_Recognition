@@ -268,3 +268,9 @@ def test_card_examples_valid_and_deterministic():
         fams.add(ex.meta["relation_family"])
     assert len(fams) >= 2
     assert C.validate_card_output('{"name_zh": "x"}')
+
+
+def test_student_facing_banned_terms():
+    from lab_detective.training.distill_jobs import banned_terms
+    assert banned_terms("原因照抄事实单里的名称") == ["事实单", "照抄"]
+    assert banned_terms("最可能是摩擦没有平衡，截距 -0.3 m/s²，下一步称小车质量。") == []
