@@ -9,6 +9,7 @@
 - 多进程（spawn，≤ 6 个），按块分发序号，主进程按序号顺序写文件。
 - 讲解样本的讲解过不了校验器、知识题库用完时，这条样本丢弃并计数（不补）。
 - 写完后按输入内容哈希检查：训练集内部重复、训练与验证重叠（重叠的训练样本删掉）。
+- --exclude 给出 bench 文件时，输入与任一 bench 题相同的训练 / 验证样本删掉并计数（实验提示组合有限，偶有撞题）。
 - 打印并写出 <out>/generate_report.json：条数、丢弃数、每个任务的吞吐量（条/秒，墙钟）和单进程耗时。
 """
 
@@ -111,10 +112,25 @@ def _dedupe(train: list[Example], val: list[Example]) -> tuple[list[Example], di
     return keep, {"train_val_overlap_removed": dup_val, "train_internal_duplicates": dup_internal}
 
 
+def exclude_hashes(files) -> set[str]:
+    """bench 文件里所有题的输入哈希（跳过 .gold / .facts 旁注）。"""
+    from .format import read_jsonl
+
+    hs: set[str] = set()
+    for f in files or []:
+        if ".gold." in str(f) or ".facts." in str(f):
+            continue
+        hs.update(content_hash(e) for e in read_jsonl(f))
+    return hs
+
+
 def generate(counts: dict[str, int], out: str | Path, workers: int = 1, chunk: int = 25,
-             base_seed: int = BASE_SEED, opts: dict | None = None, quiet: bool = False) -> dict:
-    """counts: {任务: 总条数}。写出 <out>/train/<任务>.jsonl 和 <out>/val/<任务>.jsonl，返回报告。"""
+             base_seed: int = BASE_SEED, opts: dict | None = None, quiet: bool = False,
+             exclude: set[str] | None = None) -> dict:
+    """counts: {任务: 总条数}。写出 <out>/train/<任务>.jsonl 和 <out>/val/<任务>.jsonl，返回报告。
+    exclude: 要排除的输入哈希（bench 题），撞上的训练 / 验证样本删掉。"""
     out = Path(out)
+    exclude = exclude or set()
     workers = max(1, min(int(workers), MAX_WORKERS))
     opts = opts or {}
     report = {"base_seed": base_seed, "workers": workers, "chunk": chunk, "val_fraction": VAL_FRACTION,
@@ -144,6 +160,11 @@ def generate(counts: dict[str, int], out: str | Path, workers: int = 1, chunk: i
             val, s_val = generate_task(task, "val", n_val, workers, chunk, base_seed, t_opts, pool)
             train, s_train = generate_task(task, "train", n_train, workers, chunk, base_seed, t_opts, pool)
             train, dd = _dedupe(train, val)
+            if exclude:
+                n0 = len(train) + len(val)
+                train = [e for e in train if content_hash(e) not in exclude]
+                val = [e for e in val if content_hash(e) not in exclude]
+                dd["bench_overlap_removed"] = n0 - len(train) - len(val)
             n_tr = write_jsonl(out / "train" / f"{task}.jsonl", train)
             n_va = write_jsonl(out / "val" / f"{task}.jsonl", val)
             wall = s_train["wall_s"] + s_val["wall_s"]
@@ -183,6 +204,8 @@ def main(argv=None) -> None:
     ap.add_argument("--generic-frac", type=float, default=None, help="诊断 / 讲解里程序化任务族的比例（默认 0.5）")
     ap.add_argument("--design-generic-frac", type=float, default=None, help="设计任务里程序化任务族的比例（默认 0.7）")
     ap.add_argument("--eig-samples", type=int, default=None, help="EIG 蒙特卡洛样本数（默认 64）")
+    ap.add_argument("--exclude", nargs="*", default=[],
+                    help="bench JSONL 文件：输入与其中任一题相同的训练 / 验证样本删掉（旁注文件自动跳过）")
     a = ap.parse_args(argv)
     if a.workers > MAX_WORKERS:
         print(f"--workers 最多 {MAX_WORKERS}，按 {MAX_WORKERS} 运行", file=sys.stderr)
@@ -197,7 +220,7 @@ def main(argv=None) -> None:
         opts["explain"]["n_samples"] = a.eig_samples
     counts = {"diagnose": a.n_diagnose, "design": a.n_design, "explain": a.n_explain, "knowledge": a.n_knowledge,
               "guide": a.n_guide, "card": a.n_card, "recognize": a.n_recognize}
-    rep = generate(counts, a.out, a.workers, a.chunk, a.seed, opts)
+    rep = generate(counts, a.out, a.workers, a.chunk, a.seed, opts, exclude=exclude_hashes(a.exclude))
     print(json.dumps(rep["tasks"], ensure_ascii=False, indent=2))
 
 
