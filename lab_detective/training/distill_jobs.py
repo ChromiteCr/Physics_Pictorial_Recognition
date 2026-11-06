@@ -70,10 +70,16 @@ def _diag_case(index: int, base_seed: int = BASE_SEED):
     return case, variant, cand, eig_seed, rng
 
 
+MIN_POINTS = 3  # 蒸馏只用至少 3 个测量点的诊断题
+EIG_NEAR_BEST = 0.8  # 教师选的追加测量信息增益 ≥ 最优的 80% 也算对
+
+
 def diagnose_prompt(index: int, base_seed: int = BASE_SEED) -> dict | None:
     """"给清单"变体的提示和编号表；其他变体返回 None。"""
     case, variant, cand, eig_seed, rng = _diag_case(index, base_seed)
     if variant != "list":
+        return None
+    if len(case.ds.observations) < MIN_POINTS:  # 单点数据只能靠先验猜，蒸馏价值低
         return None
     messages, disp, menu_disp = prompts.diagnose_prompt(case.exp, case.ds, cand, rng, propose=False)
     return {"messages": messages, "id_map": {d: c for c, d in disp.items()},
@@ -115,8 +121,10 @@ def diagnose_reference(index: int, base_seed: int = BASE_SEED, n_samples: int = 
         keep = set(ranked_ids[:2])
         f2["next_measurement"]["predicted"] = [p for p in f2["next_measurement"].get("predicted") or []
                                                if p.get("cause_id") in keep]
+    eig_by_item = {s.item_id: float(s.eig_bits) for s in scores}
+    labels = {s.item_id: s.label_zh for s in scores}
     return {"top": top, "tied": tied, "probs": probs, "top2_items": top2, "no_separation": no_sep,
-            "fs": fs, "fs_rounded": f2, "variant": variant}
+            "fs": fs, "fs_rounded": f2, "variant": variant, "eig_by_item": eig_by_item, "item_labels": labels}
 
 
 def check_diagnose(text: str, ref: dict, id_map: dict, menu_map: dict) -> tuple[bool, dict]:
@@ -141,9 +149,16 @@ def check_diagnose(text: str, ref: dict, id_map: dict, menu_map: dict) -> tuple[
             return False, {"reason": "next_null", "engine_top2": ref["top2_items"]}
     else:
         item = menu_map.get(nm.get("id"))
-        if item is None or (not ref["no_separation"] and item not in ref["top2_items"]):
+        eigs = ref.get("eig_by_item") or {}
+        best = max(eigs.values(), default=0.0)
+        near_best = item in eigs and best > 0 and eigs[item] >= EIG_NEAR_BEST * best
+        if item is None or (not ref["no_separation"] and item not in ref["top2_items"] and not near_best):
             return False, {"reason": "next_item", "teacher": item, "engine_top2": ref["top2_items"]}
     ex = obj["explanation"]
+    labels = ref.get("item_labels") or {}
+    for disp, item in menu_map.items():  # 只为校验替换编号，训练目标保留教师原文
+        if item in labels:
+            ex = re.sub(rf"(?<![A-Za-z0-9]){re.escape(disp)}(?![0-9])", labels[item], ex)
     if not (verify(ex, ref["fs_rounded"])["ok"] or verify(ex, ref["fs"])["ok"]):
         v = verify(ex, ref["fs_rounded"])
         return False, {"reason": "verifier", "detail": [str(p) for p in v.get("problems", [])[:3]]}

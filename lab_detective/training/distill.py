@@ -78,7 +78,10 @@ class DeepSeekTeacher:
     def name(self) -> str:
         return f"deepseek:{self.model}:{'think' if self.thinking else 'nothink'}"
 
-    def __call__(self, messages: list[dict], max_tokens: int = 2048) -> tuple[str, dict]:
+    def __call__(self, messages: list[dict], max_tokens: int | None = None) -> tuple[str, dict]:
+        # 开思考时思考内容也占 max_tokens：2048 会被思考用光、最终答案为空，所以思考档给 12000
+        if max_tokens is None:
+            max_tokens = 12000 if self.thinking else 2048
         body = {"model": self.model, "messages": _text_only(messages), "max_tokens": max_tokens,
                 "thinking": {"type": "enabled" if self.thinking else "disabled"}}
         if not self.thinking:
