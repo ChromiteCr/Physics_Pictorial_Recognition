@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import warnings
 
 import numpy as np
@@ -150,3 +151,102 @@ def test_augment_boxes_shift_inside():
     for b in nb:
         x1, y1, x2, y2 = b["bbox"]
         assert 0 <= x1 < x2 <= W and 0 <= y1 < y2 <= H
+
+
+# ── 蒸馏任务 ──────────────────────────────────────────────────────────
+
+def _first_diag_job(start=1_000_000):
+    from lab_detective.training import distill_jobs as D
+
+    for i in range(start, start + 40):
+        j = D.diagnose_job(i)
+        if j is not None:
+            return i, j
+    raise AssertionError("找不到清单变体")
+
+
+def test_distill_diagnose_prompt_matches_training_and_filters():
+    from lab_detective.training import distill_jobs as D
+
+    i, job = _first_diag_job()
+    ex = tasks_diagnose.build_example(i, "train")
+    assert job.messages == ex.messages[:-1]  # 教师看到的就是训练提示
+    assert job.meta["causes"] == ex.meta["causes"]
+    ref = D.diagnose_reference(i)
+    assert ref["top"] == ex.meta["top_cause"]
+    ok, info = job.check(ex.messages[-1]["content"])  # 引擎自己的目标应当保留
+    assert ok == ex.meta["explanation_verified"], info
+    obj = json.loads(ex.messages[-1]["content"])
+    assert not job.check("这不是 JSON")[0]
+    if len(obj["ranked"]) > 1 and len(ref["tied"]) == 1:  # 把第一名换成别的原因 → 拒绝
+        a, b = obj["ranked"][0]["cause_id"], obj["ranked"][-1]["cause_id"]
+        obj["ranked"][0]["cause_id"], obj["ranked"][-1]["cause_id"] = b, a
+        ok2, info2 = job.check(json.dumps(obj, ensure_ascii=False))
+        assert not ok2 and info2["reason"] == "top_cause"
+
+
+def test_distill_guide_check_and_job_from_id():
+    from lab_detective.training import distill_jobs as D
+
+    jobs = D.build_jobs("guide", 3, D.START["hy4"])
+    assert len(jobs) == 3 and all(j.task == "guide" for j in jobs)
+    j = jobs[0]
+    assert D.job_from_id(j.id).messages == j.messages
+    assert not j.check("第一个问题？第二个问题？")[0]
+    assert not j.check("请记下 12345.6 这个数。")[0]  # 提示里没有的数字
+
+
+def test_distill_cap_hy4_roundtrip_and_no_key(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from lab_detective.training import distill, distill_jobs as D
+
+    root = tmp_path / "distill"
+    pack = root / "hy4_pack"
+    info = D.export_pack({"diagnose": 2, "guide": 2}, pack)
+    assert info["n_prompts"] == 4 and (pack / "README.md").exists()
+    rows = [json.loads(x) for x in (pack / "prompts.jsonl").read_text(encoding="utf-8").splitlines()]
+    # 假教师：诊断题答引擎自己的目标（应保留），引导题答两个问题（应拒绝）
+    resp = []
+    for r in rows:
+        task, _, idx = r["id"].rpartition("-")
+        if task == "diagnose":
+            text = tasks_diagnose.build_example(int(idx), "train").messages[-1]["content"]
+        else:
+            text = "第一个问题？第二个问题？"
+        resp.append({"id": r["id"], "text": text})
+    resp.append({"id": "nonsense-1", "text": "x"})
+    (pack / "responses.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in resp),
+                                          encoding="utf-8")
+    monkeypatch.setattr(D, "MAX_DISTILLED", 1)  # 上限 1：第二条合格的也不留
+    st = D.import_pack(pack, root)
+    assert st["read"] == 5 and st["unknown_id"] == 1 and st["kept"] <= 1
+    assert D.total_kept(root) == st["kept"]
+    st2 = D.import_pack(pack, root)  # 重复导入不重复计
+    assert st2["duplicate"] == 4 and D.total_kept(root) == st["kept"]
+    out = D.to_train(root, tmp_path / "train")
+    if st["kept"]:
+        (f,) = out
+        ex = json.loads(Path(f).read_text(encoding="utf-8").splitlines()[0])
+        assert ex["source"] == "distill-hy4" and ex["task"] == "diagnose"
+    # 没有 key：礼貌拒绝，不抛异常
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setattr(distill, "KEY_FILE", tmp_path / "none.env")
+    a = SimpleNamespace(task="diagnose", n=1, workers=1, offset=0, model="m", no_think=False, seed=0)
+    assert D.cmd_deepseek(a, root=root) == 2
+    assert "DEEPSEEK_API_KEY" in capsys.readouterr().err
+
+
+def test_distill_deepseek_with_fake_teacher(tmp_path):
+    from types import SimpleNamespace
+
+    from lab_detective.training import distill_jobs as D
+
+    def teacher(messages, max_tokens=2048):
+        return "{}", {}
+
+    a = SimpleNamespace(task="guide", n=2, workers=1, offset=0, model="m", no_think=False,
+                        seed=D.BASE_SEED)
+    assert D.cmd_deepseek(a, teacher=teacher, root=tmp_path) == 0
+    raw = tmp_path / "deepseek_guide" / "raw_results.jsonl"
+    assert len(raw.read_text(encoding="utf-8").splitlines()) == 2

@@ -44,10 +44,12 @@ P_HINT = 0.15
 P_EXTRA = 0.5
 
 # 目标阶段（类别）权重：识别 / 规划只依赖实验卡，样本高度雷同，压低比例
+# 预测 / 测量两类发言要说出下一行的设定值，而 context.py 这两个阶段的材料里没有它（见 guide_problems 的数字检查），
+# 多数会被丢掉，所以权重压低，免得白算
 PHASE_WEIGHTS: tuple[tuple[str, float], ...] = (
-    ("identify", 0.03), ("plan", 0.07), ("predict", 0.12), ("measure", 0.15), ("check", 0.15),
-    ("diagnose_ask", 0.14), ("diagnose_reveal", 0.14), ("predict_next", 0.06), ("explain", 0.04),
-    ("reflect", 0.10),
+    ("identify", 0.03), ("plan", 0.07), ("predict", 0.04), ("measure", 0.04), ("check", 0.16),
+    ("diagnose_ask", 0.17), ("diagnose_reveal", 0.17), ("predict_next", 0.08), ("explain", 0.06),
+    ("reflect", 0.12),
 )
 STAGE = {"identify": 0, "plan": 1, "predict": 2, "measure": 3, "check": 3, "diagnose_ask": 4,
          "diagnose_reveal": 4, "predict_next": 5, "explain": 6, "reflect": 7}
@@ -105,12 +107,22 @@ def n_questions(text: str) -> int:
     return len(_Q.findall(text or ""))
 
 
-def guide_problems(text: str, category: str, fs: dict | None, cause_names, revealed: bool) -> list[str]:
+_NUM = re.compile(r"\d+(?:\.\d+)?")
+
+
+def alien_numbers(text: str, prompt_text: str) -> list[str]:
+    """发言里 ≥ 10 的数字没有在提示里出现过的（小整数多是序号，不查）。"""
+    return [n for n in _NUM.findall(text or "") if float(n) >= 10 and n not in prompt_text]
+
+
+def guide_problems(text: str, category: str, fs: dict | None, cause_names, revealed: bool,
+                   prompt_text: str | None = None) -> list[str]:
     """一轮导师发言的问题清单（空 = 通过）。
 
     - 最多一个问题；
     - 学生还没给出嫌疑原因（revealed=False）时不得出现任何原因名称；
-    - 诊断揭示 / 讲解要通过声明校验器（对照事实单）。"""
+    - 诊断揭示 / 讲解要通过声明校验器（对照事实单）；
+    - 其他阶段（给了 prompt_text 时）：≥ 10 的数字必须在提示里出现过，不教模型编数字。"""
     probs = []
     if not (text or "").strip():
         return ["空发言"]
@@ -124,6 +136,10 @@ def guide_problems(text: str, category: str, fs: dict | None, cause_names, revea
         v = verify(text, fs)
         if not v["ok"]:
             probs.append("校验器不通过：" + "；".join(str(p) for p in v.get("problems", [])[:2]))
+    if prompt_text is not None and category not in FACT_PHASES:
+        alien = alien_numbers(text, prompt_text)
+        if alien:
+            probs.append(f"提示里没有的数字：{alien[:3]}")
     return probs
 
 
@@ -346,8 +362,8 @@ def _pick_category(rng: np.random.Generator) -> str:
     return names[int(rng.choice(len(names), p=w / w.sum()))]
 
 
-def build_from_seed(seed: int, split: str, index: int, n_samples: int = EIG_SAMPLES) -> Example | None:
-    """一个种子 → 一条引导样本（过不了检查返回 None，由调用方计入丢弃数）。"""
+def pick_turn(seed: int, n_samples: int = EIG_SAMPLES) -> tuple[GuideSim, Turn, str] | None:
+    """一个种子 → (模拟的会话, 选中的一轮, 规范化后的导师发言)；蒸馏任务也用它取提示和参照。"""
     pick_rng = np.random.default_rng([seed, 1])
     target = _pick_category(pick_rng)
     sim = GuideSim(seed, n_samples)
@@ -356,14 +372,26 @@ def build_from_seed(seed: int, split: str, index: int, n_samples: int = EIG_SAMP
     if not pool:
         return None
     t = pool[int(pick_rng.integers(len(pool)))]
-    text = one_question(t.msg["text"])
-    if guide_problems(text, t.category, t.fs, sim.names, t.revealed):
+    return sim, t, one_question(t.msg["text"])
+
+
+def prompt_text(messages: list[dict]) -> str:
+    return "\n".join(m["content"] for m in messages if isinstance(m["content"], str))
+
+
+def build_from_seed(seed: int, split: str, index: int, n_samples: int = EIG_SAMPLES) -> Example | None:
+    """一个种子 → 一条引导样本（过不了检查返回 None，由调用方计入丢弃数）。"""
+    got = pick_turn(seed, n_samples)
+    if got is None:
+        return None
+    sim, t, text = got
+    if guide_problems(text, t.category, t.fs, sim.names, t.revealed, prompt_text(t.messages)):
         return None
     meta = {
         "experiment_id": sim.eid, "split": split, "seed": seed, "category": t.category,
         "phase": t.msg.get("phase"), "expects": t.msg.get("expects"), "options": t.msg.get("options"),
         "hint_level": t.hint_level, "truth_cause": sim.cause, "revealed": t.revealed,
-        "student_text": t.student_text, "n_turns_simulated": len(turns),
+        "student_text": t.student_text, "n_turns_simulated": len(sim.turns),
         "causes": [{"id": c, "name": n} for c, n in zip(sim.allowed, sim.names)],
     }
     ex = Example(f"guide-{sim.eid}-{split}-{index:06d}", "guide", "template",
