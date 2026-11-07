@@ -353,9 +353,15 @@ def import_pack(folder: Path = PACK_DIR, root: Path = DISTILL_DIR, base_seed: in
     return stats
 
 
-def to_train(root: Path = DISTILL_DIR, out: Path = REPO / "results" / "train", base_seed: int = BASE_SEED) -> dict:
+def to_train(root: Path = DISTILL_DIR, out: Path = REPO / "results" / "train", base_seed: int = BASE_SEED,
+             exclude: list[str | Path] | None = None) -> dict:
     """保留的教师输出 → 训练样本（提示原样，答案 = 教师最终输出），按教师写 distill_<教师>.jsonl，总数不超过上限。"""
-    rep, left, dropped = {}, MAX_DISTILLED, 0
+    rep, left, dropped, dup = {}, MAX_DISTILLED, 0, 0
+    from .format import content_hash, read_jsonl
+    seen = set()  # 与现有训练/验证/bench 提示相同的蒸馏题不收（同一提示两个答案会互相打架，进验证集还会泄漏）
+    for f in exclude or []:
+        if Path(f).exists() and not Path(f).name.startswith("distill_"):
+            seen.update(content_hash(e) for e in read_jsonl(f))
     for raw in sorted(Path(root).rglob("raw_results.jsonl")):
         teacher = "hy4" if raw.parent.name.startswith("hy4") else "deepseek"
         exs = []
@@ -379,6 +385,12 @@ def to_train(root: Path = DISTILL_DIR, out: Path = REPO / "results" / "train", b
                 dropped += 1
                 continue
             meta = dict(job.meta, teacher=r.get("teacher"), split="train")
+            ex = Example(f"distill-{teacher}-{job.id}", job.task, f"distill-{teacher}",
+                         list(job.messages) + [{"role": "assistant", "content": text}], meta)
+            if content_hash(ex) in seen:
+                dup += 1
+                continue
+            seen.add(content_hash(ex))
             exs.append(Example(f"distill-{teacher}-{job.id}", job.task, f"distill-{teacher}",
                                list(job.messages) + [{"role": "assistant", "content": text}], meta))
             left -= 1
@@ -387,6 +399,8 @@ def to_train(root: Path = DISTILL_DIR, out: Path = REPO / "results" / "train", b
             rep[str(path)] = write_jsonl(path, exs)
     if dropped:
         print(f"按措辞要求剔除 {dropped} 条（内部术语或让学生照抄）", file=sys.stderr)
+    if dup:
+        print(f"与现有训练/验证/bench 提示重复剔除 {dup} 条", file=sys.stderr)
     return rep
 
 
@@ -408,7 +422,8 @@ def main(argv=None) -> int:
     e.add_argument("--seed", type=int, default=BASE_SEED)
     i = sub.add_parser("hy4-import")
     i.add_argument("--pack", default=str(PACK_DIR))
-    sub.add_parser("to-train")
+    tt = sub.add_parser("to-train")
+    tt.add_argument("--exclude", nargs="*", default=[], help="这些 JSONL 里出现过的提示不收（训练、验证、bench 文件）")
     sub.add_parser("status")
     a = ap.parse_args(argv)
     if a.cmd == "deepseek":
@@ -423,7 +438,7 @@ def main(argv=None) -> int:
         print(json.dumps(import_pack(Path(a.pack)), ensure_ascii=False, indent=2))
         return 0
     if a.cmd == "to-train":
-        print(json.dumps(to_train(), ensure_ascii=False, indent=2))
+        print(json.dumps(to_train(exclude=a.exclude), ensure_ascii=False, indent=2))
         return 0
     print(json.dumps({"kept": kept_counts(), "total": total_kept(), "cap": MAX_DISTILLED}, ensure_ascii=False, indent=2))
     return 0
